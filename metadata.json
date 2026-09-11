@@ -1,0 +1,6 @@
+{
+  "name": "Tasa Today",
+  "description": "Cotizaciones del dólar en Venezuela, calculadora de conversión y tasas oficiales BCV y USDT en tiempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
