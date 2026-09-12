@@ -519,56 +519,69 @@ const FALLBACK_INTERVENCIONES = [
   { fecha: '10-08-2026', nro: '023-26', tipoCambioBsEur: '875,22', tipoCambioBsUsd: '752,36', paridadEurUsd: '1,1633' },
 ];
 
-function scrapeIntervenciones(): Promise<Array<{ fecha: string; nro: string; tipoCambioBsEur: string; tipoCambioBsUsd: string; paridadEurUsd: string; isRecent?: boolean }>> {
-  // Paridad EUR/USD oficial o de referencia del BCV (ej. 954.02 / 820.10 = 1.1633)
+async function scrapeIntervenciones(): Promise<Array<{ fecha: string; nro: string; tipoCambioBsEur: string; tipoCambioBsUsd: string; paridadEurUsd: string; isRecent?: boolean }>> {
   const paridad = (cachedRatesData && cachedRatesData.euro?.numPrice && cachedRatesData.bcv?.numPrice)
     ? (cachedRatesData.euro.numPrice / cachedRatesData.bcv.numPrice)
     : 1.1633;
   const paridadStr = paridad.toFixed(4).replace('.', ',');
 
-  return new Promise((resolve) => {
-    const req = https.get(
-      'https://www.bcv.org.ve/politica-cambiaria/intervencion-cambiaria',
-      { rejectUnauthorized: false, timeout: 6000 },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => {
-          try {
-            const tableMatch = data.match(/<table[^>]*class="[^"]*views-table[^"]*"[\s\S]*?<\/table>/i);
-            if (!tableMatch) return resolve(FALLBACK_INTERVENCIONES);
-            const rows = [...tableMatch[0].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-            const parsed: Array<{ fecha: string; nro: string; tipoCambioBsEur: string; tipoCambioBsUsd: string; paridadEurUsd: string; isRecent?: boolean }> = [];
-            for (const r of rows) {
-              const cols = [...r[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) =>
-                c[1].replace(/<[^>]+>/g, '').trim()
-              );
-              if (cols.length >= 3) {
-                const eurNum = parseFloat(cols[2].replace(/\./g, '').replace(',', '.'));
-                const usdNum = !isNaN(eurNum) && paridad > 0 ? (eurNum / paridad) : 0;
-                parsed.push({
-                  fecha: cols[0],
-                  nro: cols[1],
-                  tipoCambioBsEur: cols[2],
-                  tipoCambioBsUsd: usdNum > 0 ? usdNum.toFixed(2).replace('.', ',') : '0,00',
-                  paridadEurUsd: paridadStr,
-                  isRecent: parsed.length === 0,
-                });
-              }
-            }
-            resolve(parsed.length > 0 ? parsed : FALLBACK_INTERVENCIONES);
-          } catch {
-            resolve(FALLBACK_INTERVENCIONES);
-          }
-        });
-      }
-    );
-    req.on('error', () => resolve(FALLBACK_INTERVENCIONES));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve(FALLBACK_INTERVENCIONES);
+  try {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+    const response = await fetch('https://www.bcv.org.ve/politica-cambiaria/intervencion-cambiaria', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'es-VE,es-ES,es;q=0.9,en;q=0.8',
+      },
+      signal: controller.signal,
     });
-  });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const html = await response.text();
+      const tableMatch = html.match(/<table[^>]*class="[^"]*views-table[^"]*"[\s\S]*?<\/table>/i);
+      const tableHtml = tableMatch ? tableMatch[0] : html;
+      const rows = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+      const items: Array<{ fecha: string; nro: string; tipoCambioBsEur: string; tipoCambioBsUsd: string; paridadEurUsd: string; isRecent?: boolean }> = [];
+
+      for (const row of rows) {
+        const cols = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((col) =>
+          col[1].replace(/&nbsp;/g, ' ').replace(/<[^>]+>/g, '').trim()
+        );
+
+        if (cols.length >= 3) {
+          const fecha = cols[0];
+          const nro = cols[1];
+          const tipoCambioBsEur = cols[2];
+
+          if (/^\d{2}-\d{2}-\d{4}$/.test(fecha) && nro && tipoCambioBsEur) {
+            const eurNum = parseFloat(tipoCambioBsEur.replace(/\./g, '').replace(',', '.'));
+            const usdNum = !isNaN(eurNum) && paridad > 0 ? (eurNum / paridad) : 0;
+
+            items.push({
+              fecha,
+              nro,
+              tipoCambioBsEur,
+              tipoCambioBsUsd: usdNum > 0 ? usdNum.toFixed(2).replace('.', ',') : '0,00',
+              paridadEurUsd: paridadStr,
+              isRecent: items.length === 0,
+            });
+          }
+        }
+      }
+
+      if (items.length > 0) {
+        return items;
+      }
+    }
+  } catch (err) {
+    console.warn('Error scraping BCV intervenciones in server.ts:', err);
+  }
+
+  return FALLBACK_INTERVENCIONES;
 }
 
 let cachedIntervenciones: any = null;

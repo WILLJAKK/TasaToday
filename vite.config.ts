@@ -88,6 +88,25 @@ function apiRatesDevPlugin(): Plugin {
             return;
           }
         }
+        if (req.url && req.url.startsWith('/api/intervenciones')) {
+          try {
+            const mod = await server.ssrLoadModule('/netlify/functions/intervenciones.ts');
+            const result = await mod.handler({ httpMethod: req.method || 'GET' }, {});
+            res.statusCode = result.statusCode || 200;
+            if (result.headers) {
+              for (const [k, v] of Object.entries(result.headers)) {
+                res.setHeader(k, v as string);
+              }
+            }
+            res.end(result.body);
+            return;
+          } catch (e: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: e?.message }));
+            return;
+          }
+        }
         next();
       });
     },

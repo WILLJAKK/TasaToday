@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { IntervencionItem } from '../types';
 import { Landmark, Bell, BellRing, RefreshCw, CheckCircle2, ExternalLink, Calendar, Search, ShieldCheck } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -7,43 +7,9 @@ interface IntervencionViewProps {
   onRefresh?: () => void;
 }
 
-const DEFAULT_INTERVENCIONES: IntervencionItem[] = [
-  { fecha: '09-09-2026', nro: '027-26', tipoCambioBsEur: '954,02', tipoCambioBsUsd: '820,10', paridadEurUsd: '1,1633', isRecent: true },
-  { fecha: '08-09-2026', nro: '027-26', tipoCambioBsEur: '947,30', tipoCambioBsUsd: '814,32', paridadEurUsd: '1,1633' },
-  { fecha: '07-09-2026', nro: '027-26', tipoCambioBsEur: '945,65', tipoCambioBsUsd: '812,90', paridadEurUsd: '1,1633' },
-  { fecha: '04-09-2026', nro: '026-26', tipoCambioBsEur: '938,45', tipoCambioBsUsd: '806,71', paridadEurUsd: '1,1633' },
-  { fecha: '03-09-2026', nro: '026-26', tipoCambioBsEur: '932,81', tipoCambioBsUsd: '801,87', paridadEurUsd: '1,1633' },
-  { fecha: '02-09-2026', nro: '026-26', tipoCambioBsEur: '929,09', tipoCambioBsUsd: '798,67', paridadEurUsd: '1,1633' },
-  { fecha: '01-09-2026', nro: '026-26', tipoCambioBsEur: '926,55', tipoCambioBsUsd: '796,48', paridadEurUsd: '1,1633' },
-  { fecha: '31-08-2026', nro: '026-26', tipoCambioBsEur: '922,69', tipoCambioBsUsd: '793,17', paridadEurUsd: '1,1633' },
-  { fecha: '28-08-2026', nro: '025-26', tipoCambioBsEur: '921,88', tipoCambioBsUsd: '792,47', paridadEurUsd: '1,1633' },
-  { fecha: '27-08-2026', nro: '025-26', tipoCambioBsEur: '921,81', tipoCambioBsUsd: '792,41', paridadEurUsd: '1,1633' },
-  { fecha: '26-08-2026', nro: '025-26', tipoCambioBsEur: '919,15', tipoCambioBsUsd: '790,12', paridadEurUsd: '1,1633' },
-  { fecha: '25-08-2026', nro: '025-26', tipoCambioBsEur: '916,03', tipoCambioBsUsd: '787,44', paridadEurUsd: '1,1633' },
-  { fecha: '24-08-2026', nro: '025-26', tipoCambioBsEur: '916,01', tipoCambioBsUsd: '787,42', paridadEurUsd: '1,1633' },
-  { fecha: '21-08-2026', nro: '024-26', tipoCambioBsEur: '911,22', tipoCambioBsUsd: '783,31', paridadEurUsd: '1,1633' },
-  { fecha: '20-08-2026', nro: '024-26', tipoCambioBsEur: '906,83', tipoCambioBsUsd: '779,53', paridadEurUsd: '1,1633' },
-  { fecha: '19-08-2026', nro: '024-26', tipoCambioBsEur: '897,82', tipoCambioBsUsd: '771,79', paridadEurUsd: '1,1633' },
-  { fecha: '18-08-2026', nro: '024-26', tipoCambioBsEur: '896,03', tipoCambioBsUsd: '770,25', paridadEurUsd: '1,1633' },
-  { fecha: '17-08-2026', nro: '024-26', tipoCambioBsEur: '894,49', tipoCambioBsUsd: '768,93', paridadEurUsd: '1,1633' },
-  { fecha: '14-08-2026', nro: '023-26', tipoCambioBsEur: '889,45', tipoCambioBsUsd: '764,59', paridadEurUsd: '1,1633' },
-  { fecha: '13-08-2026', nro: '023-26', tipoCambioBsEur: '885,08', tipoCambioBsUsd: '760,84', paridadEurUsd: '1,1633' },
-  { fecha: '12-08-2026', nro: '023-26', tipoCambioBsEur: '882,30', tipoCambioBsUsd: '758,45', paridadEurUsd: '1,1633' },
-  { fecha: '11-08-2026', nro: '023-26', tipoCambioBsEur: '879,35', tipoCambioBsUsd: '755,91', paridadEurUsd: '1,1633' },
-  { fecha: '10-08-2026', nro: '023-26', tipoCambioBsEur: '875,22', tipoCambioBsUsd: '752,36', paridadEurUsd: '1,1633' },
-];
-
-const calculateUsdRate = (eurStr: string, fallbackUsd?: string, parity = 1.1633): string => {
-  if (fallbackUsd && fallbackUsd !== '0,00') return fallbackUsd;
-  const eurNum = parseFloat(eurStr.replace(/\./g, '').replace(',', '.'));
-  if (isNaN(eurNum) || parity <= 0) return '0,00';
-  const usdVal = eurNum / parity;
-  return usdVal.toFixed(2).replace('.', ',');
-};
-
 export const IntervencionView: React.FC<IntervencionViewProps> = () => {
-  const [intervenciones, setIntervenciones] = useState<IntervencionItem[]>(DEFAULT_INTERVENCIONES);
-  const [loading, setLoading] = useState(false);
+  const [intervenciones, setIntervenciones] = useState<IntervencionItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [pushEnabled, setPushEnabled] = useState<boolean>(() => {
     try {
@@ -51,25 +17,13 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
         return Notification.permission === 'granted';
       }
     } catch {
-      // Ignorar restricciones en iframes
+      // Ignorar restricciones en entornos aislados
     }
     return false;
   });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const safeStorageGet = (key: string): string | null => {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  };
-
-  const safeStorageSet = (key: string, val: string) => {
-    try {
-      localStorage.setItem(key, val);
-    } catch {}
-  };
+  const { colors, isDark } = useTheme();
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -78,72 +32,86 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
     }, 4500);
   };
 
-  const triggerPushNotification = (item: IntervencionItem) => {
-    const title = '¡Nueva Intervención Bancaria BCV!';
-    const body = `Intervención N° ${item.nro} del ${item.fecha}. Tasa: ${item.tipoCambioBsEur} Bs./EUR.`;
+  const safeStorageGet = (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return localStorage.getItem(key);
+      }
+    } catch {}
+    return null;
+  };
 
-    // Intentar disparar notificación nativa de forma completamente segura
+  const safeStorageSet = (key: string, val: string) => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(key, val);
+      }
+    } catch {}
+  };
+
+  const triggerPushNotification = useCallback((item: IntervencionItem) => {
     try {
       if (
         typeof window !== 'undefined' &&
         'Notification' in window &&
         Notification.permission === 'granted'
       ) {
-        // En Safari/WebKit no pasar 'icon' relativo para evitar SyntaxError (SYNTAX_ERR)
-        new Notification(title, { body });
+        new Notification('Nueva Intervención BCV', {
+          body: `Nro: ${item.nro} - EUR: ${item.tipoCambioBsEur}`,
+        });
       }
     } catch {
-      // En iframes o WebKit restringido, la notificación nativa puede no permitirse
+      // Manejo de restricciones en Safari o iframes
     }
+    showToast(`🔔 Nueva Intervención BCV: Nro: ${item.nro} - EUR: ${item.tipoCambioBsEur}`);
+  }, []);
 
-    // Notificación en pantalla garantizada (Toast in-app)
-    showToast(`🔔 ${title}: ${body}`);
-  };
-
-  const fetchIntervenciones = async (isManual = false) => {
+  const fetchIntervenciones = useCallback(async (isManual = false) => {
     setLoading(true);
-    let loadedItems: IntervencionItem[] | null = null;
-
     try {
       const res = await fetch('/api/intervenciones', { cache: 'no-store' });
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          const json = JSON.parse(text);
-          if (json && Array.isArray(json.data) && json.data.length > 0) {
-            loadedItems = json.data;
+      if (!res.ok) {
+        throw new Error(`Error en servidor: HTTP ${res.status}`);
+      }
+
+      const json = await res.json();
+      const rawList: IntervencionItem[] = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.data)
+        ? json.data
+        : [];
+
+      if (rawList.length > 0) {
+        setIntervenciones(rawList);
+
+        const latest = rawList[0];
+        if (latest) {
+          const currentKey = `${latest.nro}_${latest.fecha}`;
+          const savedKey = safeStorageGet('last_known_intervencion');
+
+          if (savedKey && savedKey !== currentKey) {
+            triggerPushNotification(latest);
           }
+          safeStorageSet('last_known_intervencion', currentKey);
+        }
+
+        if (isManual) {
+          showToast('Historial de intervenciones actualizado del BCV');
         }
       }
-    } catch (err) {
-      console.warn('Advertencia consultando API de intervenciones, usando datos de respaldo:', err);
-    }
-
-    const finalData = loadedItems || DEFAULT_INTERVENCIONES;
-    setIntervenciones(finalData);
-
-    // Detección segura de nueva intervención
-    try {
-      const latest = finalData[0];
-      if (latest) {
-        const currentKey = `${latest.nro}_${latest.fecha}`;
-        const savedLast = safeStorageGet('last_known_intervencion');
-        if (savedLast && savedLast !== currentKey) {
-          triggerPushNotification(latest);
-        }
-        safeStorageSet('last_known_intervencion', currentKey);
+    } catch (err: any) {
+      console.error('Error al obtener intervenciones cambiarias:', err);
+      if (isManual) {
+        showToast('No se pudo conectar con el servicio del BCV.');
       }
-    } catch {}
-
-    if (isManual) {
-      showToast('Historial de intervenciones actualizado del BCV');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [triggerPushNotification]);
 
   useEffect(() => {
     fetchIntervenciones();
-  }, []);
+  }, [fetchIntervenciones]);
 
   const requestPushPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -157,31 +125,32 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
         setPushEnabled(true);
         showToast('¡Notificaciones Push activadas para nuevas intervenciones!');
         try {
-          new Notification('$ TasaToday - BCV Oficial', {
-            body: 'Notificaciones activadas. Te avisaremos cuando el BCV publique una intervención cambiaria.',
+          new Notification('Nueva Intervención BCV', {
+            body: 'Notificaciones activadas. Recibirás una alerta cada vez que el BCV publique una intervención.',
           });
         } catch {}
       } else {
         setPushEnabled(false);
-        showToast('Permiso de notificación no concedido por el navegador.');
+        showToast('Permiso de notificación denegado por el usuario.');
       }
     } catch {
-      showToast('No se pudo solicitar permiso de notificación en este entorno.');
+      showToast('No se pudo solicitar permisos de notificación en este dispositivo.');
     }
   };
 
   const handleTestNotification = () => {
-    const sample = intervenciones[0] || DEFAULT_INTERVENCIONES[0];
+    const sample = intervenciones[0];
+    if (!sample) return;
 
     try {
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification('¡Prueba de Notificación Push!', {
-          body: `Intervención BCV N° ${sample.nro} (${sample.fecha}) a ${sample.tipoCambioBsEur} Bs./EUR`,
+        new Notification('Nueva Intervención BCV', {
+          body: `Nro: ${sample.nro} - EUR: ${sample.tipoCambioBsEur}`,
         });
       }
     } catch {}
 
-    showToast(`🔔 Intervención BCV N° ${sample.nro} (${sample.tipoCambioBsEur} Bs./EUR)`);
+    showToast(`🔔 Notificación de prueba: Nro: ${sample.nro} - EUR: ${sample.tipoCambioBsEur}`);
   };
 
   const filteredIntervenciones = intervenciones.filter((item) => {
@@ -190,23 +159,22 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
     return item.fecha.toLowerCase().includes(term) || item.nro.toLowerCase().includes(term);
   });
 
-  const { colors, isDark } = useTheme();
   const latestIntervencion = intervenciones[0];
 
   return (
-    <div 
+    <div
       style={{ backgroundColor: colors.backgroundColor }}
       className="flex-1 flex flex-col overflow-y-auto transition-colors duration-200"
     >
       {/* Toast Alert Flotante */}
       {toastMessage && (
-        <div 
+        <div
           id="toast-notification-intervencion"
           className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-[#1F2937] text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 text-xs sm:text-sm font-medium border border-[#374151] max-w-[90vw] animate-in fade-in slide-in-from-top-4 duration-200"
         >
           <BellRing size={18} className="text-[#3F9047] shrink-0 animate-bounce" />
           <span>{toastMessage}</span>
-          <button 
+          <button
             onClick={() => setToastMessage(null)}
             className="ml-2 text-gray-400 hover:text-white font-bold"
           >
@@ -216,16 +184,15 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
       )}
 
       <div className="p-3 sm:p-4 space-y-3 max-w-2xl mx-auto w-full">
-        
         {/* Cabecera del Módulo */}
-        <div 
-          style={{ 
-            backgroundColor: colors.surfaceColor, 
-            borderColor: colors.borderColor 
+        <div
+          style={{
+            backgroundColor: colors.surfaceColor,
+            borderColor: colors.borderColor,
           }}
           className="border p-3 shadow-xs transition-colors duration-200"
         >
-          <div 
+          <div
             style={{ borderColor: colors.borderColor }}
             className="flex items-center justify-between pb-2 border-b"
           >
@@ -234,7 +201,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                 <Landmark size={18} />
               </div>
               <div>
-                <h2 
+                <h2
                   style={{ color: colors.textColor }}
                   className="text-[13px] sm:text-[14px] font-bold tracking-tight"
                 >
@@ -259,11 +226,11 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
             </button>
           </div>
 
-          {/* Estado de Notificaciones Push */}
-          <div 
-            style={{ 
-              backgroundColor: isDark ? '#1E293B' : '#F9FAFB', 
-              borderColor: colors.borderColor 
+          {/* Estado y Activación de Notificaciones Push */}
+          <div
+            style={{
+              backgroundColor: isDark ? '#1E293B' : '#F9FAFB',
+              borderColor: colors.borderColor,
             }}
             className="mt-2.5 pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 border rounded-xs"
           >
@@ -308,16 +275,16 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
           </div>
         </div>
 
-        {/* Tarjeta de Última Intervención */}
+        {/* Tarjeta de Última Intervención Oficial */}
         {latestIntervencion && (
-          <div 
-            style={{ 
-              backgroundColor: colors.surfaceColor, 
-              borderColor: colors.usdtColor 
+          <div
+            style={{
+              backgroundColor: colors.surfaceColor,
+              borderColor: colors.usdtColor,
             }}
             className="border-2 p-3 shadow-xs transition-colors duration-200"
           >
-            <div 
+            <div
               style={{ borderColor: colors.borderColor }}
               className="flex flex-wrap items-center justify-between gap-1 pb-2 border-b"
             >
@@ -325,14 +292,14 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                 <span className="bg-[#2C9945] text-white text-[9px] font-bold px-2 py-0.5 tracking-wider uppercase rounded-xs">
                   Última Intervención
                 </span>
-                <span 
+                <span
                   style={{ color: colors.textColor }}
                   className="text-[12px] font-extrabold font-mono"
                 >
                   N° {latestIntervencion.nro}
                 </span>
               </div>
-              <span 
+              <span
                 style={{ color: colors.secondaryTextColor }}
                 className="text-[11px] font-bold flex items-center gap-1 font-mono"
               >
@@ -344,21 +311,21 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
             {/* Columnas Principales: BS/EUR y BS/USD */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2.5">
               {/* Bs. / EUR (Oficial del BCV) */}
-              <div 
-                style={{ 
-                  backgroundColor: isDark ? '#1E293B' : '#F8FAFC', 
-                  borderColor: colors.borderColor 
+              <div
+                style={{
+                  backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                  borderColor: colors.borderColor,
                 }}
                 className="p-2.5 sm:p-3 border rounded-xs relative"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <span 
+                  <span
                     style={{ color: colors.textColor }}
                     className="text-[11px] font-bold uppercase tracking-tight"
                   >
                     BS. / EUR
                   </span>
-                  <span 
+                  <span
                     style={{
                       backgroundColor: isDark ? '#334155' : '#E2E8F0',
                       color: colors.textColor,
@@ -370,7 +337,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                 </div>
                 <div className="flex items-baseline gap-1 mt-1">
                   <span style={{ color: colors.secondaryTextColor }} className="text-xs font-bold">Bs.</span>
-                  <span 
+                  <span
                     style={{ color: colors.textColor }}
                     className="text-[20px] sm:text-[22px] font-extrabold font-mono tracking-tighter"
                   >
@@ -382,11 +349,11 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                 </p>
               </div>
 
-              {/* Bs. / USD (Calculado automáticamente) */}
-              <div 
-                style={{ 
-                  backgroundColor: isDark ? 'rgba(44, 153, 69, 0.12)' : '#F4FBF5', 
-                  borderColor: isDark ? 'rgba(44, 153, 69, 0.4)' : '#86EFAC' 
+              {/* Bs. / USD (Calculado automáticamente con paridad) */}
+              <div
+                style={{
+                  backgroundColor: isDark ? 'rgba(44, 153, 69, 0.12)' : '#F4FBF5',
+                  borderColor: isDark ? 'rgba(44, 153, 69, 0.4)' : '#86EFAC',
                 }}
                 className="p-2.5 sm:p-3 border rounded-xs relative"
               >
@@ -394,10 +361,10 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                   <span className="text-[11px] font-bold text-[#2C9945] uppercase tracking-tight">
                     BS. / USD
                   </span>
-                  <span 
-                    style={{ 
+                  <span
+                    style={{
                       backgroundColor: isDark ? 'rgba(44, 153, 69, 0.25)' : '#DCFCE7',
-                      color: isDark ? '#4ADE80' : '#15803D'
+                      color: isDark ? '#4ADE80' : '#15803D',
                     }}
                     className="text-[9px] font-bold px-1.5 py-0.5 rounded-xs"
                   >
@@ -407,49 +374,49 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                 <div className="flex items-baseline gap-1 mt-1">
                   <span className="text-xs font-bold text-[#2C9945]">Bs.</span>
                   <span className="text-[20px] sm:text-[22px] font-extrabold text-[#2C9945] font-mono tracking-tighter">
-                    {calculateUsdRate(latestIntervencion.tipoCambioBsEur, latestIntervencion.tipoCambioBsUsd)}
+                    {latestIntervencion.tipoCambioBsUsd || '0,00'}
                   </span>
                 </div>
                 <p style={{ color: isDark ? '#94A3B8' : '#4B5563' }} className="text-[9.5px] mt-1">
-                  Tasa del euro dividida entre la paridad internacional (1,1633 EUR/USD)
+                  Tasa del euro dividida entre la paridad internacional ({latestIntervencion.paridadEurUsd || '1,1633'} EUR/USD)
                 </p>
               </div>
             </div>
 
             {/* Detalle del cálculo automático */}
-            <div 
-              style={{ 
-                backgroundColor: isDark ? '#1E293B' : '#F9FAFB', 
+            <div
+              style={{
+                backgroundColor: isDark ? '#1E293B' : '#F9FAFB',
                 borderColor: colors.borderColor,
-                color: colors.secondaryTextColor
+                color: colors.secondaryTextColor,
               }}
               className="mt-2.5 p-2 border text-[10px] flex flex-col sm:flex-row sm:items-center justify-between gap-1 rounded-xs"
             >
               <span className="flex items-center gap-1 font-medium tracking-tight">
                 <ShieldCheck size={13} className="text-[#2C9945] shrink-0" />
-                Fórmula: {latestIntervencion.tipoCambioBsEur} Bs./EUR ÷ 1,1633 (paridad) = {calculateUsdRate(latestIntervencion.tipoCambioBsEur, latestIntervencion.tipoCambioBsUsd)} Bs./USD
+                Fórmula: {latestIntervencion.tipoCambioBsEur} Bs./EUR ÷ {latestIntervencion.paridadEurUsd || '1,1633'} (paridad) = {latestIntervencion.tipoCambioBsUsd} Bs./USD
               </span>
               <span style={{ color: colors.mutedTextColor }} className="font-mono text-[9px] text-right tracking-tight">
-                Paridad: 1 EUR = 1,1633 USD
+                Paridad: 1 EUR = {latestIntervencion.paridadEurUsd || '1,1633'} USD
               </span>
             </div>
           </div>
         )}
 
         {/* Historial de Intervenciones */}
-        <div 
-          style={{ 
-            backgroundColor: colors.surfaceColor, 
-            borderColor: colors.borderColor 
+        <div
+          style={{
+            backgroundColor: colors.surfaceColor,
+            borderColor: colors.borderColor,
           }}
           className="border p-2 sm:p-3 shadow-xs transition-colors duration-200"
         >
-          <div 
+          <div
             style={{ borderColor: colors.borderColor }}
             className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b"
           >
             <div>
-              <h3 
+              <h3
                 style={{ color: colors.textColor }}
                 className="text-[12px] sm:text-[13px] font-bold uppercase tracking-wide"
               >
@@ -479,7 +446,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
             </div>
           </div>
 
-          {/* Tabla de Historial Ajustada Sin Scroll Horizontal */}
+          {/* Tabla de Historial Dinámica */}
           <div className="mt-2 w-full overflow-hidden">
             <table className="w-full table-fixed text-left border-collapse">
               <thead>
@@ -491,11 +458,11 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                   <th className="w-[14%] py-2 px-0.5 text-center">Estado</th>
                 </tr>
               </thead>
-              <tbody 
+              <tbody
                 style={{ borderColor: colors.borderColor }}
                 className="divide-y font-mono text-[10px] sm:text-[11.5px]"
               >
-                {loading ? (
+                {loading && intervenciones.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-8 text-center text-gray-500 font-sans">
                       <RefreshCw size={18} className="animate-spin text-[#2C9945] mx-auto mb-2" />
@@ -511,7 +478,6 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                 ) : (
                   filteredIntervenciones.map((item, idx) => {
                     const isLatest = idx === 0 && !searchTerm;
-                    const usdCalculado = calculateUsdRate(item.tipoCambioBsEur, item.tipoCambioBsUsd);
 
                     const rowBg = isLatest
                       ? (isDark ? 'rgba(44, 153, 69, 0.2)' : '#F0FDF4')
@@ -525,7 +491,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                         style={{ backgroundColor: rowBg }}
                         className="transition-colors"
                       >
-                        <td 
+                        <td
                           style={{ color: colors.textColor }}
                           className="py-2 px-1 sm:px-2 tracking-tighter truncate"
                         >
@@ -536,27 +502,27 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                             <span>{item.fecha}</span>
                           </span>
                         </td>
-                        <td 
+                        <td
                           style={{ color: colors.secondaryTextColor }}
                           className="py-2 px-0.5 text-center font-semibold tracking-tighter truncate"
                         >
                           {item.nro}
                         </td>
-                        <td 
+                        <td
                           style={{ color: colors.textColor }}
                           className="py-2 px-1 sm:px-1.5 text-right font-bold tracking-tighter"
                         >
                           {item.tipoCambioBsEur}
                         </td>
                         <td className="py-2 px-1 sm:px-1.5 text-right font-bold text-[#2C9945] tracking-tighter">
-                          {usdCalculado}
+                          {item.tipoCambioBsUsd || '0,00'}
                         </td>
                         <td className="py-2 px-0.5 text-center font-sans">
                           {isLatest ? (
-                            <span 
+                            <span
                               style={{
                                 backgroundColor: isDark ? 'rgba(44, 153, 69, 0.3)' : '#DCFCE7',
-                                color: isDark ? '#4ADE80' : '#15803D'
+                                color: isDark ? '#4ADE80' : '#15803D',
                               }}
                               className="text-[8.5px] sm:text-[9px] font-bold px-1 py-0.5 rounded-xs tracking-tight inline-block"
                             >
@@ -577,7 +543,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
           </div>
 
           {/* Enlace Oficial a la Fuente */}
-          <div 
+          <div
             style={{ borderColor: colors.borderColor, color: colors.mutedTextColor }}
             className="mt-3 pt-2.5 border-t flex items-center justify-between text-[10px]"
           >
@@ -603,7 +569,6 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
             {new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
           </p>
         </div>
-
       </div>
     </div>
   );
