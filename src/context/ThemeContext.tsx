@@ -201,7 +201,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         metaApple.setAttribute('name', 'apple-mobile-web-app-status-bar-style');
         document.head.appendChild(metaApple);
       }
-      metaApple.setAttribute('content', isDark ? 'black-translucent' : 'default');
+      metaApple.setAttribute('content', 'default');
     }
   }, [isDark]);
 
