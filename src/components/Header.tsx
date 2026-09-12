@@ -23,100 +23,106 @@ export const Header: React.FC<HeaderProps> = ({ isPhoneFrame, setIsPhoneFrame, o
 
   return (
     <header 
+      id="app-header"
       style={{ 
-        backgroundColor: colors.headerBackground, 
-        borderColor: colors.headerBorder 
+        background: isDark 
+          ? 'linear-gradient(180deg, #18202E 0%, #2E3D52 100%)' 
+          : 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)', 
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : colors.headerBorder,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
-      className="relative h-[56px] px-3.5 flex items-center justify-between border-b select-none shrink-0 z-20 transition-colors duration-200"
+      className="relative flex flex-col justify-end border-b select-none shrink-0 z-20 transition-all duration-200"
     >
-      {/* Left controls: Theme toggle & Desktop frame toggle */}
-      <div className="flex items-center gap-1.5 min-w-[70px]">
-        <ThemeToggle />
+      <div className="h-[56px] px-3.5 flex items-center justify-between w-full">
+        {/* Left controls: Theme toggle & Desktop frame toggle */}
+        <div className="flex items-center gap-1.5 min-w-[70px]">
+          <ThemeToggle />
 
-        {/* Toggle desktop frame on wide screens */}
-        <button
-          id="btn-toggle-frame"
-          onClick={() => setIsPhoneFrame(prev => !prev)}
-          style={{
-            backgroundColor: isDark ? '#334155' : '#F1F5F9',
-            borderColor: colors.borderColor,
-            color: colors.secondaryTextColor,
-          }}
-          className="hidden md:flex items-center justify-center w-8 h-8 rounded-full border transition-colors hover:opacity-80"
-          title="Alternar tamaño de pantalla"
-        >
-          {isPhoneFrame ? <Monitor size={15} /> : <Smartphone size={15} />}
-        </button>
-      </div>
-
-      {/* Center: App Name & Date */}
-      <div className="flex flex-col items-center justify-center">
-        <div className="flex items-center leading-none">
-          <span 
-            style={{ color: colors.usdtColor }}
-            className="text-[23px] font-bold italic leading-none select-none"
-          >
-            $
-          </span>
-          <span 
-            style={{ color: colors.usdtColor }}
-            className="text-[21px] font-bold italic tracking-[-1px] leading-none"
-          >
-            Tasa
-          </span>
-          <span 
-            style={{ color: colors.textColor }}
-            className="text-[21px] font-bold italic tracking-[-1px] leading-none transition-colors duration-200"
-          >
-            Today
-          </span>
-        </div>
-        <span 
-          style={{ color: colors.mutedTextColor }}
-          className="text-[12px] font-medium tracking-wide mt-0.5 font-mono transition-colors duration-200"
-        >
-          {todayFormatted}
-        </span>
-      </div>
-
-      {/* Right controls: Share & Lock / Security Icon */}
-      <div className="flex items-center justify-end gap-1.5 min-w-[70px]">
-        {onShare && (
+          {/* Toggle desktop frame on wide screens */}
           <button
-            id="btn-header-share"
-            onClick={onShare}
+            id="btn-toggle-frame"
+            onClick={() => setIsPhoneFrame(prev => !prev)}
             style={{
               backgroundColor: isDark ? '#334155' : '#F1F5F9',
               borderColor: colors.borderColor,
-              color: colors.textColor,
+              color: colors.secondaryTextColor,
             }}
-            className="w-8 h-8 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-80 active:scale-95 shadow-2xs"
-            title="Compartir cotización con imagen y texto"
+            className="hidden md:flex items-center justify-center w-8 h-8 rounded-full border transition-colors hover:opacity-80"
+            title="Alternar tamaño de pantalla"
           >
-            <Share2 size={15} />
+            {isPhoneFrame ? <Monitor size={15} /> : <Smartphone size={15} />}
           </button>
-        )}
+        </div>
 
-        <button
-          id="btn-toggle-lock"
-          onClick={toggleLock}
-          style={{
-            backgroundColor: isDark ? '#334155' : '#F1F5F9',
-            borderColor: colors.borderColor,
-          }}
-          className="w-8 h-8 rounded-full border flex items-center justify-center transition-colors cursor-pointer hover:opacity-80"
-          title={locked ? 'Protección activa' : 'Desbloqueado'}
-        >
-          {locked ? (
-            <Lock size={15} style={{ color: colors.textColor }} />
-          ) : (
-            <Unlock size={15} style={{ color: colors.mutedTextColor }} />
+        {/* Center: App Name & Date */}
+        <div className="flex flex-col items-center justify-center">
+          <div className="flex items-center leading-none">
+            <span 
+              style={{ color: colors.usdtColor }}
+              className="text-[23px] font-bold italic leading-none select-none"
+            >
+              $
+            </span>
+            <span 
+              style={{ color: colors.usdtColor }}
+              className="text-[21px] font-bold italic tracking-[-1px] leading-none"
+            >
+              Tasa
+            </span>
+            <span 
+              style={{ color: colors.textColor }}
+              className="text-[21px] font-bold italic tracking-[-1px] leading-none transition-colors duration-200"
+            >
+              Today
+            </span>
+          </div>
+          <span 
+            style={{ color: colors.mutedTextColor }}
+            className="text-[12px] font-medium tracking-wide mt-0.5 font-mono transition-colors duration-200"
+          >
+            {todayFormatted}
+          </span>
+        </div>
+
+        {/* Right controls: Share & Lock / Security Icon */}
+        <div className="flex items-center justify-end gap-1.5 min-w-[70px]">
+          {onShare && (
+            <button
+              id="btn-header-share"
+              onClick={onShare}
+              style={{
+                backgroundColor: isDark ? '#334155' : '#F1F5F9',
+                borderColor: colors.borderColor,
+                color: colors.textColor,
+              }}
+              className="w-8 h-8 rounded-full border flex items-center justify-center transition-all cursor-pointer hover:opacity-80 active:scale-95 shadow-2xs"
+              title="Compartir cotización con imagen y texto"
+            >
+              <Share2 size={15} />
+            </button>
           )}
-        </button>
+
+          <button
+            id="btn-toggle-lock"
+            onClick={toggleLock}
+            style={{
+              backgroundColor: isDark ? '#334155' : '#F1F5F9',
+              borderColor: colors.borderColor,
+            }}
+            className="w-8 h-8 rounded-full border flex items-center justify-center transition-colors cursor-pointer hover:opacity-80"
+            title={locked ? 'Protección activa' : 'Desbloqueado'}
+          >
+            {locked ? (
+              <Lock size={15} style={{ color: colors.textColor }} />
+            ) : (
+              <Unlock size={15} style={{ color: colors.mutedTextColor }} />
+            )}
+          </button>
+        </div>
       </div>
 
       {showToast && (
-        <div className="absolute top-[60px] right-4 bg-gray-900 text-white text-xs px-3 py-1.5 rounded shadow-lg animate-fade-in border border-gray-700 z-50 font-sans">
+        <div className="absolute top-[calc(100%+8px)] right-4 bg-gray-900 text-white text-xs px-3 py-1.5 rounded shadow-lg animate-fade-in border border-gray-700 z-50 font-sans">
           {locked ? '🔒 Modo protegido activo' : '🔓 Modo edición libre'}
         </div>
       )}

@@ -23,9 +23,10 @@ export const BottomTabBar: React.FC<BottomTabBarProps> = ({ activeTab, setActive
       id="bottom-tab-bar"
       style={{ 
         backgroundColor: colors.tabBarBackground, 
-        borderColor: colors.tabBarBorder 
+        borderColor: colors.tabBarBorder,
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
-      className="h-[62px] border-t flex items-stretch select-none shrink-0 z-20 transition-colors duration-200"
+      className="min-h-[58px] border-t flex items-stretch select-none shrink-0 z-20 transition-colors duration-200"
     >
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;

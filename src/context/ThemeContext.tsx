@@ -11,6 +11,7 @@ export interface ThemeColors {
   surfaceColor: string;          // Fondo de tarjetas y paneles
   cardBg: string;                // Fondo de tarjetas / cuadros interactivos
   headerBackground: string;      // Fondo del header
+  headerGradient: string;        // Degradado del header para soporte de barra superior y modo oscuro
   headerBorder: string;          // Borde del header
   tabBarBackground: string;      // Fondo del tab bar inferior
   tabBarActiveBg: string;        // Fondo de la pestaña activa
@@ -42,6 +43,7 @@ export const themeColors: Record<ActiveTheme, ThemeColors> = {
     surfaceColor: '#FFFFFF',
     cardBg: '#FFFFFF',
     headerBackground: '#FFFFFF',
+    headerGradient: 'linear-gradient(180deg, #F8FAFC 0%, #FFFFFF 100%)',
     headerBorder: '#DDDDDD',
     tabBarBackground: '#FFFFFF',
     tabBarActiveBg: '#2C9945',
@@ -68,7 +70,8 @@ export const themeColors: Record<ActiveTheme, ThemeColors> = {
     backgroundColor: '#0F172A',     // Slate oscuro profundo
     surfaceColor: '#1E293B',        // Superficie de tarjetas oscura
     cardBg: '#1E293B',
-    headerBackground: '#1E293B',    // Header oscuro
+    headerBackground: '#18202E',    // Header oscuro
+    headerGradient: 'linear-gradient(180deg, #18202E 0%, #2E3D52 100%)', // Degradado gris a gris más claro
     headerBorder: '#334155',        // Borde sutil oscuro
     tabBarBackground: '#1E293B',    // Tab bar oscuro
     tabBarActiveBg: '#2C9945',      // Verde activo idéntico
@@ -168,15 +171,37 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const isDark = activeTheme === 'dark';
   const colors = themeColors[activeTheme];
 
-  // Sincronizar clase 'dark' en el elemento raíz para soporte CSS / Tailwind
+  // Sincronizar clase 'dark', meta theme-color y barra de estado de iOS/Android
   useEffect(() => {
     if (typeof document !== 'undefined') {
       const root = document.documentElement;
       if (isDark) {
         root.classList.add('dark');
+        root.style.backgroundColor = '#18202E';
+        if (document.body) document.body.style.backgroundColor = '#18202E';
       } else {
         root.classList.remove('dark');
+        root.style.backgroundColor = '#F8FAFC';
+        if (document.body) document.body.style.backgroundColor = '#F8FAFC';
       }
+
+      // Sincronizar meta theme-color para navegadores móviles (Safari iOS y Chrome Android)
+      let metaTheme = document.querySelector('meta[name="theme-color"]');
+      if (!metaTheme) {
+        metaTheme = document.createElement('meta');
+        metaTheme.setAttribute('name', 'theme-color');
+        document.head.appendChild(metaTheme);
+      }
+      metaTheme.setAttribute('content', isDark ? '#18202E' : '#FFFFFF');
+
+      // Sincronizar barra de estado para PWA / Web Clip en iOS
+      let metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+      if (!metaApple) {
+        metaApple = document.createElement('meta');
+        metaApple.setAttribute('name', 'apple-mobile-web-app-status-bar-style');
+        document.head.appendChild(metaApple);
+      }
+      metaApple.setAttribute('content', isDark ? 'black-translucent' : 'default');
     }
   }, [isDark]);
 

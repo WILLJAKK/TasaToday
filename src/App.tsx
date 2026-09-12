@@ -226,8 +226,8 @@ export default function App() {
         }}
         className={`w-full flex flex-col overflow-hidden transition-all duration-300 ${
           isPhoneFrame
-            ? 'max-w-[440px] h-screen md:h-[840px] md:max-h-[92vh] md:rounded-2xl md:shadow-2xl md:border'
-            : 'max-w-4xl h-screen md:h-[90vh] md:rounded-2xl md:shadow-2xl md:border'
+            ? 'max-w-[440px] h-[100dvh] md:h-[840px] md:max-h-[92vh] md:rounded-2xl md:shadow-2xl md:border'
+            : 'max-w-4xl h-[100dvh] md:h-[90vh] md:rounded-2xl md:shadow-2xl md:border'
         }`}
       >
         {/* Cabecera Clásica $ TasaToday */}

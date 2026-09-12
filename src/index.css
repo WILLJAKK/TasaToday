@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #18202E;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.dark {
+  background-color: #18202E;
+}
+
+html:not(.dark) {
+  background-color: #F8FAFC;
+}
