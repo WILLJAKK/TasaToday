@@ -294,108 +294,16 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
     setIsResetting(true);
     try {
       let freshData: any = null;
-      // 1. Intentar endpoint central del backend con caché invalidada
-      try {
-        const serverRes = await fetch(`/api/rates?t=${Date.now()}`, { 
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-        });
-        if (serverRes.ok) {
-          const json = await serverRes.json();
-          if (json && json.bcv && json.usdt && json.euro) {
-            freshData = json;
-          }
+      // Consultar endpoint central /api/rates
+      const serverRes = await fetch(`/api/rates?t=${Date.now()}`, { 
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+      });
+      if (serverRes.ok) {
+        const json = await serverRes.json();
+        if (json && json.bcv && json.usdt && json.euro) {
+          freshData = json;
         }
-      } catch {}
-
-      // 2. Si no respondió el backend, consultar APIs públicas directas en vivo
-      if (!freshData) {
-        const [dolarRes, euroRes, usdtMarketRes, btcRes, goldRes] = await Promise.allSettled([
-          fetch('https://ve.dolarapi.com/v1/dolares/oficial', { cache: 'no-store' }),
-          fetch('https://ve.dolarapi.com/v1/euros/oficial', { cache: 'no-store' }),
-          fetch('https://ve.dolarapi.com/v1/dolares/' + atob('cGFyYWxlbG8='), { cache: 'no-store' }),
-          fetch('https://api.binance.us/api/v3/ticker/24hr?symbol=BTCUSDT', { cache: 'no-store' }),
-          fetch('https://api.gold-api.com/price/XAU', { cache: 'no-store' }),
-        ]);
-
-        let bcvPrice = rates.bcv?.numPrice || 832.4883;
-        let euroPrice = rates.euro?.numPrice || 968.0673;
-        let usdtPrice = rates.usdt?.numPrice || 940.95;
-        let btcPrice = rates.btc?.numPrice || 77800;
-        let goldPrice = rates.oro?.numPrice || 4364.20;
-
-        if (dolarRes.status === 'fulfilled' && dolarRes.value.ok) {
-          const dJson = await dolarRes.value.json();
-          if (dJson?.promedio) bcvPrice = parseFloat(dJson.promedio);
-        }
-        if (euroRes.status === 'fulfilled' && euroRes.value.ok) {
-          const eJson = await euroRes.value.json();
-          if (eJson?.promedio) euroPrice = parseFloat(eJson.promedio);
-        }
-        if (usdtMarketRes.status === 'fulfilled' && usdtMarketRes.value.ok) {
-          const pJson = await usdtMarketRes.value.json();
-          if (pJson?.promedio) usdtPrice = parseFloat(pJson.promedio);
-        }
-        if (btcRes.status === 'fulfilled' && btcRes.value.ok) {
-          const bJson = await btcRes.value.json();
-          const p = parseFloat(bJson.lastPrice);
-          if (!isNaN(p) && p > 0) btcPrice = p;
-        }
-        if (goldRes.status === 'fulfilled' && goldRes.value.ok) {
-          const gJson = await goldRes.value.json();
-          const p = typeof gJson.price === 'number' ? gJson.price : parseFloat(gJson.price);
-          if (!isNaN(p) && p > 0) goldPrice = p;
-        }
-
-        freshData = {
-          bcv: {
-            price: bcvPrice.toFixed(2).replace('.', ','),
-            numPrice: bcvPrice,
-            change: '5,41',
-            percent: '0.66',
-            isUp: true,
-            status: 'ok',
-          },
-          usdt: {
-            price: usdtPrice.toFixed(2).replace('.', ','),
-            numPrice: usdtPrice,
-            change: '6,35',
-            percent: '0.66',
-            isUp: true,
-            status: 'ok',
-          },
-          euro: {
-            price: euroPrice.toFixed(2).replace('.', ','),
-            numPrice: euroPrice,
-            change: '6,73',
-            percent: '0.71',
-            isUp: true,
-            status: 'ok',
-          },
-          btc: {
-            price: btcPrice.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-            numPrice: btcPrice,
-            change: '750.00',
-            percent: '0.98',
-            isUp: true,
-            status: 'ok',
-          },
-          oro: {
-            price: goldPrice.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-            numPrice: goldPrice,
-            change: '45.00',
-            percent: '1.04',
-            isUp: true,
-            status: 'ok',
-          },
-          lastUpdated: new Date().toLocaleDateString('es-VE', {
-            month: 'long',
-            day: 'numeric',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-        };
       }
 
       if (freshData) {

@@ -120,127 +120,28 @@ export default function App() {
   }, []);
 
   // ==========================================
-  // LÓGICA DE EXTRACCIÓN OFICIAL BCV, BINANCE Y ORO
+  // LÓGICA DE EXTRACCIÓN OFICIAL: ESTRICTAMENTE /api/rates
   // ==========================================
   const fetchData = async (isBackground = false) => {
     if (!isBackground && !rates.bcv?.price) {
       setLoading(true);
     }
     try {
-      // 1. Intentar llamar al endpoint central de backend /api/rates (alimentado en segundo plano cada 1 min)
-      try {
-        const serverRes = await fetch(`/api/rates?t=${Date.now()}`, { 
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
-        });
-        if (serverRes.ok) {
-          const serverData = await serverRes.json();
-          if (serverData && serverData.bcv && serverData.euro) {
-            const now = new Date();
-            const dateStr = now.toLocaleDateString('es-VE', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-            }).toUpperCase();
+      const res = await fetch(`/api/rates?t=${Date.now()}`, { 
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
 
-            updateRatesAndCache({
-              bcv: serverData.bcv,
-              usdt: serverData.usdt,
-              euro: serverData.euro,
-              btc: serverData.btc,
-              oro: serverData.oro,
-              lastUpdated: serverData.lastUpdated || dateStr,
-            });
-            setIsOffline(false);
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {
-        // Fallback a APIs públicas directas si el backend no responde
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
 
-      // 2. Fallback de alta fidelidad: DolarApi oficial del BCV, Mercado USDT en vivo, Binance US BTC y Gold-API Spot ORO
-      const [dolarRes, euroRes, usdtFallbackRes, btcRes, oroRes, geckoRes] = await Promise.allSettled([
-        fetch('https://ve.dolarapi.com/v1/dolares/oficial', { cache: 'no-store' }),
-        fetch('https://ve.dolarapi.com/v1/euros/oficial', { cache: 'no-store' }),
-        fetch('https://ve.dolarapi.com/v1/dolares/' + atob('cGFyYWxlbG8='), { cache: 'no-store' }),
-        fetch('https://api.binance.us/api/v3/ticker/24hr?symbol=BTCUSDT', { cache: 'no-store' }),
-        fetch('https://api.gold-api.com/price/XAU', { cache: 'no-store' }),
-        fetch('https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd&include_24hr_change=true', { cache: 'no-store' }),
-      ]);
-
-      let bcvPrice = rates.bcv?.numPrice || 832.49;
-      let euroPrice = rates.euro?.numPrice || 968.07;
-      let usdtPrice = rates.usdt?.numPrice || 957.90;
-
-      if (dolarRes.status === 'fulfilled' && dolarRes.value.ok) {
-        const dJson = await dolarRes.value.json();
-        if (dJson?.promedio) bcvPrice = parseFloat(dJson.promedio);
-      }
-
-      if (euroRes.status === 'fulfilled' && euroRes.value.ok) {
-        const eJson = await euroRes.value.json();
-        if (eJson?.promedio) euroPrice = parseFloat(eJson.promedio);
-      }
-
-      if (usdtFallbackRes.status === 'fulfilled' && usdtFallbackRes.value.ok) {
-        const pJson = await usdtFallbackRes.value.json();
-        if (pJson?.promedio) {
-          const parsedP = parseFloat(pJson.promedio);
-          if (!isNaN(parsedP) && parsedP > 0) usdtPrice = parsedP;
-        }
-      }
-
-      let btcItem: RateItem = rates.btc || { ...defaultMissingItem };
-
-      if (btcRes.status === 'fulfilled' && btcRes.value.ok) {
-        const bJson = await btcRes.value.json();
-        const p = parseFloat(bJson.lastPrice);
-        const c = parseFloat(bJson.priceChange);
-        const pct = parseFloat(bJson.priceChangePercent);
-        if (!isNaN(p) && p > 0) {
-          btcItem = {
-            price: p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            numPrice: p,
-            change: Math.abs(c).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            percent: Math.abs(pct).toFixed(2),
-            isUp: c >= 0,
-            status: 'ok',
-          };
-        }
-      }
-
-      let oroItem: RateItem = rates.oro || { ...defaultMissingItem };
-      if (oroRes.status === 'fulfilled' && oroRes.value.ok) {
-        const oJson = await oroRes.value.json();
-        const p = typeof oJson.price === 'number' ? oJson.price : parseFloat(oJson.price);
-        if (!isNaN(p) && p > 0) {
-          let pct = 0.16;
-          if (geckoRes.status === 'fulfilled' && geckoRes.value.ok) {
-            try {
-              const gJson = await geckoRes.value.json();
-              if (typeof gJson?.['pax-gold']?.usd_24h_change === 'number') {
-                pct = gJson['pax-gold'].usd_24h_change;
-              }
-            } catch {}
-          }
-          const c = (p * Math.abs(pct)) / 100;
-          oroItem = {
-            price: p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            numPrice: p,
-            change: Math.abs(c).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            percent: Math.abs(pct).toFixed(2),
-            isUp: pct >= 0,
-            status: 'ok',
-          };
-        }
+      const serverData = await res.json();
+      if (!serverData || !serverData.bcv || !serverData.usdt) {
+        throw new Error('Respuesta inválida desde /api/rates');
       }
 
       const now = new Date();
@@ -250,40 +151,29 @@ export default function App() {
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        second: '2-digit',
       }).toUpperCase();
 
       updateRatesAndCache({
-        bcv: {
-          price: bcvPrice.toFixed(2).replace('.', ','),
-          numPrice: bcvPrice,
-          change: '5,41',
-          percent: '0.66',
-          isUp: true,
-          status: 'ok',
-        },
-        usdt: {
-          price: usdtPrice.toFixed(2).replace('.', ','),
-          numPrice: usdtPrice,
-          change: '6,35',
-          percent: '0.66',
-          isUp: true,
-          status: 'ok',
-        },
-        euro: {
-          price: euroPrice.toFixed(2).replace('.', ','),
-          numPrice: euroPrice,
-          change: '6,73',
-          percent: '0.71',
-          isUp: true,
-          status: 'ok',
-        },
-        btc: btcItem,
-        oro: oroItem,
-        lastUpdated: dateStr,
+        bcv: serverData.bcv || null,
+        usdt: serverData.usdt || null,
+        euro: serverData.euro || null,
+        btc: serverData.btc || null,
+        oro: serverData.oro || null,
+        lastUpdated: serverData.lastUpdated || dateStr,
       });
       setIsOffline(false);
     } catch (error) {
-      console.warn('Error fetching rates (posible modo sin conexión):', error);
+      console.warn('[Fetch Error] Falló la consulta a /api/rates:', error);
+      // Si el fetch hacia /api/rates falla, retorna null para los valores, forzando a la UI a mostrar el estado "FALTA DE DATOS"
+      setRates({
+        bcv: null,
+        usdt: null,
+        euro: null,
+        btc: null,
+        oro: null,
+        lastUpdated: '',
+      });
       setIsOffline(true);
     } finally {
       setLoading(false);

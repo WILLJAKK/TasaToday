@@ -64,19 +64,48 @@ function aistudioMediaPlugin(): Plugin {
 }
 // LINT.ThenChange(//depot/google3/java/com/google/alkali/boq/makersuite/applet_dev_service/templates/initializers/react_theme/vite.config.ts:aistudio_media_plugin)
 
+function apiRatesDevPlugin(): Plugin {
+  return {
+    name: 'vite-plugin-api-rates',
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        if (req.url && req.url.startsWith('/api/rates')) {
+          try {
+            const mod = await server.ssrLoadModule('/netlify/functions/rates.ts');
+            const result = await mod.handler({ httpMethod: req.method || 'GET' }, {});
+            res.statusCode = result.statusCode || 200;
+            if (result.headers) {
+              for (const [k, v] of Object.entries(result.headers)) {
+                res.setHeader(k, v as string);
+              }
+            }
+            res.end(result.body);
+            return;
+          } catch (e: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: e?.message }));
+            return;
+          }
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), aistudioMediaPlugin()],
+    plugins: [react(), tailwindcss(), aistudioMediaPlugin(), apiRatesDevPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      host: '0.0.0.0',
+      port: 3000,
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
