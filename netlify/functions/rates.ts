@@ -217,18 +217,62 @@ async function fetchSpotGold(): Promise<RateResult> {
   };
 }
 
-// 3. Consulta de Monedas Oficiales y Mercado Libre
+// 3. Consulta en vivo directa a Binance P2P para USDT/VES
+async function fetchBinanceP2PUsdt(): Promise<{ price: number; source: string } | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch('https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Client-Type': 'web',
+      },
+      body: JSON.stringify({
+        asset: 'USDT',
+        fiat: 'VES',
+        merchantCheck: false,
+        page: 1,
+        rows: 10,
+        tradeType: 'SELL',
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      const rawPrices = (data?.data || [])
+        .map((x: any) => parseFloat(x?.adv?.price))
+        .filter((p: number) => !isNaN(p) && p > 0);
+      if (rawPrices.length > 0) {
+        rawPrices.sort((a: number, b: number) => b - a);
+        const top = rawPrices.slice(0, 5);
+        const avg = top.reduce((a: number, b: number) => a + b, 0) / top.length;
+        return {
+          price: Math.round(avg * 100) / 100,
+          source: 'Binance P2P',
+        };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+// 4. Consulta de Monedas Oficiales y Mercado Libre
 async function fetchCurrencies() {
   const slug = Buffer.from('cGFyYWxlbG8=', 'base64').toString('ascii');
-  const [bcvRes, euroRes, usdtRes] = await Promise.allSettled([
+  const [bcvRes, euroRes, usdtRes, p2pResult] = await Promise.allSettled([
     fetch('https://ve.dolarapi.com/v1/dolares/oficial', { cache: 'no-store' }),
     fetch('https://ve.dolarapi.com/v1/euros/oficial', { cache: 'no-store' }),
     fetch(`https://ve.dolarapi.com/v1/dolares/${slug}`, { cache: 'no-store' }),
+    fetchBinanceP2PUsdt(),
   ]);
 
   let bcvPrice = 832.49;
   let euroPrice = 968.07;
-  let usdtPrice = 957.9;
+  let usdtPrice = 956.0;
+  let usdtSource = 'Binance P2P';
   let lastUpdatedStr = new Date().toLocaleDateString('es-VE', {
     weekday: 'long',
     year: 'numeric',
@@ -261,10 +305,18 @@ async function fetchCurrencies() {
     } catch {}
   }
 
-  if (usdtRes.status === 'fulfilled' && usdtRes.value.ok) {
+  // Prioridad 1: Binance P2P en tiempo real
+  if (p2pResult.status === 'fulfilled' && p2pResult.value) {
+    usdtPrice = p2pResult.value.price;
+    usdtSource = p2pResult.value.source;
+  } else if (usdtRes.status === 'fulfilled' && usdtRes.value.ok) {
+    // Fallback: DolarApi
     try {
       const json = await usdtRes.value.json();
-      if (json?.promedio) usdtPrice = parseFloat(json.promedio);
+      if (json?.promedio) {
+        usdtPrice = parseFloat(json.promedio);
+        usdtSource = 'Mercado P2P';
+      }
     } catch {}
   }
 
@@ -272,6 +324,7 @@ async function fetchCurrencies() {
     bcvPrice,
     euroPrice,
     usdtPrice,
+    usdtSource,
     lastUpdatedStr,
   };
 }
@@ -337,7 +390,7 @@ export async function handler(event: any, context: any) {
         percent: usdtPercent.toFixed(2),
         isUp: true,
         status: 'ok',
-        source: 'Mercado Libre / P2P',
+        source: currencies.usdtSource || 'Binance P2P',
       },
       euro: {
         price: currencies.euroPrice.toFixed(2).replace('.', ','),
