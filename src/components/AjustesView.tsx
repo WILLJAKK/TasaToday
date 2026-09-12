@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ExchangeRatesData } from '../types';
+import { ExchangeRatesData, PaymentOption, PagoMovilData, ZelleData, UsdtData } from '../types';
 import { AdModal } from './AdModal';
 import { LegalModal } from './LegalModal';
-import { Star, ShieldCheck, Play, Sliders, Check, RotateCcw, Moon, Sun, Clock, AlertCircle, FileText, ChevronRight } from 'lucide-react';
+import { 
+  Star, ShieldCheck, Play, Sliders, Check, RotateCcw, Moon, Sun, Clock, 
+  AlertCircle, FileText, ChevronRight, Smartphone, DollarSign, Coins, Ban, Landmark,
+  Building2, ImagePlus, Upload, Trash2
+} from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { useTheme, ThemeMode } from '../context/ThemeContext';
 import {
@@ -59,6 +63,131 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
   const [editEuro, setEditEuro] = useState(rates.euro?.numPrice?.toString() || '0');
   const [editBtc, setEditBtc] = useState(rates.btc?.numPrice?.toString() || '0');
   const [editOro, setEditOro] = useState(rates.oro?.numPrice?.toString() || '0');
+
+  // Datos de Métodos de Pago guardados para cobros
+  const [paymentMethod, setPaymentMethod] = useState<PaymentOption>(() => {
+    try {
+      return (localStorage.getItem('tasadolar_share_payment_method') as PaymentOption) || 'pago_movil';
+    } catch {
+      return 'pago_movil';
+    }
+  });
+
+  const [pagoMovil, setPagoMovil] = useState<PagoMovilData>(() => {
+    try {
+      const saved = localStorage.getItem('tasadolar_pm_data');
+      return saved ? JSON.parse(saved) : { banco: '', cedula: '', telefono: '' };
+    } catch {
+      return { banco: '', cedula: '', telefono: '' };
+    }
+  });
+
+  const [zelle, setZelle] = useState<ZelleData>(() => {
+    try {
+      const saved = localStorage.getItem('tasadolar_zelle_data');
+      return saved ? JSON.parse(saved) : { titular: '', correo: '' };
+    } catch {
+      return { titular: '', correo: '' };
+    }
+  });
+
+  const [usdt, setUsdt] = useState<UsdtData>(() => {
+    try {
+      const saved = localStorage.getItem('tasadolar_usdt_data');
+      return saved ? JSON.parse(saved) : { trc20: '', binanceId: '' };
+    } catch {
+      return { trc20: '', binanceId: '' };
+    }
+  });
+
+  const [companyLogo, setCompanyLogo] = useState<string>(() => {
+    try {
+      return localStorage.getItem('tasadolar_company_logo') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [companyName, setCompanyName] = useState<string>(() => {
+    try {
+      return localStorage.getItem('tasadolar_company_name') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [paymentSavedToast, setPaymentSavedToast] = useState(false);
+
+  const handleSavePaymentMethods = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem('tasadolar_share_payment_method', paymentMethod);
+      localStorage.setItem('tasadolar_pm_data', JSON.stringify(pagoMovil));
+      localStorage.setItem('tasadolar_zelle_data', JSON.stringify(zelle));
+      localStorage.setItem('tasadolar_usdt_data', JSON.stringify(usdt));
+      if (companyLogo) {
+        localStorage.setItem('tasadolar_company_logo', companyLogo);
+      } else {
+        localStorage.removeItem('tasadolar_company_logo');
+      }
+      if (companyName) {
+        localStorage.setItem('tasadolar_company_name', companyName);
+      } else {
+        localStorage.removeItem('tasadolar_company_name');
+      }
+      window.dispatchEvent(new CustomEvent('payment-method-changed', { detail: paymentMethod }));
+      setPaymentSavedToast(true);
+      setTimeout(() => setPaymentSavedToast(false), 3500);
+    } catch {}
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 360;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const isPng = file.type.includes('png');
+          const dataUrl = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', 0.88);
+          setCompanyLogo(dataUrl);
+          try {
+            localStorage.setItem('tasadolar_company_logo', dataUrl);
+          } catch {}
+        }
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleRemoveLogo = () => {
+    setCompanyLogo('');
+    try {
+      localStorage.removeItem('tasadolar_company_logo');
+    } catch {}
+  };
 
   // Mantener sincronizados los campos cuando se abren o se actualizan las tasas en vivo
   useEffect(() => {
@@ -669,6 +798,359 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Configuración de Métodos de Pago para Cobros y Calculadora */}
+        <div 
+          id="card-settings-payment-methods"
+          style={{ 
+            backgroundColor: colors.surfaceColor, 
+            borderColor: colors.borderColor 
+          }}
+          className="p-4 rounded-xs border shadow-xs transition-colors duration-200"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div 
+                style={{ 
+                  backgroundColor: isDark ? 'rgba(44, 153, 69, 0.15)' : '#DCFCE7',
+                  color: colors.usdtColor
+                }}
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+              >
+                <Landmark size={16} />
+              </div>
+              <div>
+                <h3 style={{ color: colors.textColor }} className="font-bold text-sm">
+                  Medios de Pago para Cobrar
+                </h3>
+                <p style={{ color: colors.secondaryTextColor }} className="text-xs">
+                  El método activo define el botón de cobro de la Calculadora y los comprobantes
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleSavePaymentMethods} className="space-y-3.5 pt-1">
+            {/* Selector de Método Predeterminado para Cobrar */}
+            <div>
+              <label style={{ color: colors.secondaryTextColor }} className="block text-[11px] font-bold mb-1.5 uppercase">
+                Método Predeterminado Activo:
+              </label>
+              <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                {[
+                  { id: 'none', label: 'Sin Datos', icon: Ban, color: '#64748B' },
+                  { id: 'pago_movil', label: 'Pago Móvil', icon: Smartphone, color: colors.usdtColor || '#2C9945' },
+                  { id: 'zelle', label: 'Zelle', icon: DollarSign, color: '#7C3AED' },
+                  { id: 'usdt', label: 'USDT', icon: Coins, color: '#F59E0B' },
+                ].map((item) => {
+                  const isSelected = paymentMethod === item.id;
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setPaymentMethod(item.id as PaymentOption)}
+                      style={{
+                        backgroundColor: isSelected 
+                          ? (isDark ? '#1E293B' : '#FFFFFF') 
+                          : (isDark ? '#0F172A' : '#F8FAFC'),
+                        borderColor: isSelected ? item.color : colors.borderColor,
+                        boxShadow: isSelected ? `0 0 0 2px ${item.color}35` : undefined,
+                      }}
+                      className={`p-2 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                        isSelected ? 'scale-[1.02] shadow-xs' : 'hover:opacity-85'
+                      }`}
+                    >
+                      <div 
+                        style={{ 
+                          backgroundColor: isSelected ? `${item.color}25` : (isDark ? '#1E293B' : '#E2E8F0'),
+                          color: isSelected ? item.color : colors.secondaryTextColor,
+                        }}
+                        className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                      >
+                        <Icon size={13} />
+                      </div>
+                      <span 
+                        style={{ color: isSelected ? (isDark ? '#FFFFFF' : '#0F172A') : colors.textColor }}
+                        className="text-[11px] font-bold truncate w-full"
+                      >
+                        {item.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SECCIÓN 1: DATOS PAGO MÓVIL */}
+            <div 
+              style={{ backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.borderColor }}
+              className="p-3 rounded-lg border space-y-2.5"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                <Smartphone size={14} />
+                <span>Datos de Pago Móvil (Bolívares)</span>
+              </div>
+
+              <div>
+                <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                  Banco
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Banesco (0134) o Banco de Venezuela (0102)"
+                  value={pagoMovil.banco}
+                  onChange={(e) => setPagoMovil(prev => ({ ...prev, banco: e.target.value }))}
+                  style={{
+                    backgroundColor: colors.surfaceColor,
+                    color: colors.textColor,
+                    borderColor: colors.borderColor,
+                  }}
+                  className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Cédula / RIF
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: V-12345678"
+                    value={pagoMovil.cedula}
+                    onChange={(e) => setPagoMovil(prev => ({ ...prev, cedula: e.target.value }))}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Teléfono
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 0414-1234567"
+                    value={pagoMovil.telefono}
+                    onChange={(e) => setPagoMovil(prev => ({ ...prev, telefono: e.target.value }))}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 2: DATOS ZELLE */}
+            <div 
+              style={{ backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.borderColor }}
+              className="p-3 rounded-lg border space-y-2.5"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400">
+                <DollarSign size={14} />
+                <span>Datos de Zelle (Dólares USD)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Nombre del Titular
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Juan Pérez"
+                    value={zelle.titular}
+                    onChange={(e) => setZelle(prev => ({ ...prev, titular: e.target.value }))}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Correo / Teléfono Zelle
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: pagos@ejemplo.com"
+                    value={zelle.correo}
+                    onChange={(e) => setZelle(prev => ({ ...prev, correo: e.target.value }))}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 3: DATOS USDT / BINANCE */}
+            <div 
+              style={{ backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.borderColor }}
+              className="p-3 rounded-lg border space-y-2.5"
+            >
+              <div className="flex items-center gap-1.5 text-xs font-bold text-amber-500">
+                <Coins size={14} />
+                <span>Datos de USDT / Binance (Cripto)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Billetera TRC20 (Tron)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: T..."
+                    value={usdt.trc20}
+                    onChange={(e) => setUsdt(prev => ({ ...prev, trc20: e.target.value }))}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-amber-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Binance Pay ID / Correo
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: 12345678"
+                    value={usdt.binanceId}
+                    onChange={(e) => setUsdt(prev => ({ ...prev, binanceId: e.target.value }))}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* SECCIÓN 4: LOGO Y EMPRESA COBRADORA */}
+            <div 
+              style={{ backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.borderColor }}
+              className="p-3 rounded-lg border space-y-2.5"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  <Building2 size={14} />
+                  <span>Logo de Empresa Cobradora (Planilla)</span>
+                </div>
+                {companyLogo ? (
+                  <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
+                    <Check size={12} /> Guardado
+                  </span>
+                ) : (
+                  <span style={{ color: colors.secondaryTextColor }} className="text-[10px]">
+                    Opcional
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                {companyLogo ? (
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    <div className="w-14 h-14 rounded-lg bg-white dark:bg-slate-900 border border-slate-700/30 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+                      <img 
+                        src={companyLogo} 
+                        alt="Logo Empresa" 
+                        className="max-h-full max-w-full object-contain"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <label 
+                        className="px-2.5 py-1.5 rounded border border-emerald-500/40 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Upload size={12} />
+                        Cambiar
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleLogoUpload}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="px-2.5 py-1.5 rounded border border-rose-500/30 text-xs font-bold text-rose-500 hover:bg-rose-500/10 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 size={12} />
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="w-full py-2.5 px-3 rounded-lg border-2 border-dashed border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <ImagePlus size={16} />
+                    <span>Subir Logo desde tu Teléfono</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoUpload}
+                    />
+                  </label>
+                )}
+
+                <div className="w-full sm:flex-1">
+                  <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
+                    Nombre Comercial / Empresa
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Inversiones Ávila C.A."
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    style={{
+                      backgroundColor: colors.surfaceColor,
+                      color: colors.textColor,
+                      borderColor: colors.borderColor,
+                    }}
+                    className="w-full px-2.5 py-1.5 border rounded text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              style={{ backgroundColor: colors.usdtColor }}
+              className="w-full text-white py-2.5 rounded text-xs font-bold hover:opacity-90 transition-colors cursor-pointer shadow-xs"
+            >
+              Guardar Métodos de Pago
+            </button>
+
+            {paymentSavedToast && (
+              <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-1 animate-fade-in">
+                <Check size={14} className="shrink-0" />
+                <span>¡Métodos de pago guardados! El botón de la Calculadora se ha actualizado con tu método predeterminado.</span>
+              </div>
+            )}
+          </form>
         </div>
 
         {/* Custom Rates Adjustment Tool */}

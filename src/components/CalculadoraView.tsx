@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ExchangeRatesData, SelectedCurrency, GoldUnit, TROY_OZ_PER_KG, GRAMS_PER_TROY_OZ } from '../types';
+import React, { useState, useEffect } from 'react';
+import { ExchangeRatesData, SelectedCurrency, GoldUnit, TROY_OZ_PER_KG, GRAMS_PER_TROY_OZ, PaymentOption } from '../types';
 import { AdBanner } from './AdBanner';
-import { ArrowRightLeft, Calculator, TrendingUp, RotateCcw, Delete } from 'lucide-react';
+import { ArrowRightLeft, Calculator, TrendingUp, RotateCcw, Delete, Share2, Smartphone, DollarSign, Coins } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { ShareCalculationModal } from './ShareCalculationModal';
 
 interface CalculadoraViewProps {
   rates: ExchangeRatesData;
@@ -131,6 +132,87 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const [conversionDirection, setConversionDirection] = useState<'USD_TO_BS' | 'BS_TO_USD'>('USD_TO_BS');
+  const [isShareCalcOpen, setIsShareCalcOpen] = useState<boolean>(false);
+
+  // Método de pago activo para cobros (sincronizado con Ajustes y Modal de Compartir)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentOption>(() => {
+    try {
+      return (localStorage.getItem('tasadolar_share_payment_method') as PaymentOption) || 'pago_movil';
+    } catch {
+      return 'pago_movil';
+    }
+  });
+
+  useEffect(() => {
+    const handleMethodChanged = (e: any) => {
+      if (e?.detail) {
+        setPaymentMethod(e.detail);
+      } else {
+        try {
+          const saved = localStorage.getItem('tasadolar_share_payment_method') as PaymentOption;
+          if (saved) setPaymentMethod(saved);
+        } catch {}
+      }
+    };
+    const handleStorage = () => {
+      try {
+        const saved = localStorage.getItem('tasadolar_share_payment_method') as PaymentOption;
+        if (saved) setPaymentMethod(saved);
+      } catch {}
+    };
+
+    window.addEventListener('payment-method-changed', handleMethodChanged);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('payment-method-changed', handleMethodChanged);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  // Configuración del botón de compartir cobro
+  const getShareButtonConfig = () => {
+    switch (paymentMethod) {
+      case 'pago_movil':
+        return {
+          text: 'Compartir Cobro',
+          shortText: 'Cobro',
+          Icon: Share2,
+          bgClass: 'bg-emerald-600 hover:bg-emerald-500',
+          badgeColor: 'text-emerald-500 hover:bg-emerald-500/10',
+          iconColor: '#2C9945',
+        };
+      case 'zelle':
+        return {
+          text: 'Compartir Cobro',
+          shortText: 'Cobro',
+          Icon: Share2,
+          bgClass: 'bg-purple-600 hover:bg-purple-500',
+          badgeColor: 'text-purple-500 hover:bg-purple-500/10',
+          iconColor: '#7C3AED',
+        };
+      case 'usdt':
+        return {
+          text: 'Compartir Cobro',
+          shortText: 'Cobro',
+          Icon: Share2,
+          bgClass: 'bg-amber-600 hover:bg-amber-500',
+          badgeColor: 'text-amber-500 hover:bg-amber-500/10',
+          iconColor: '#F59E0B',
+        };
+      case 'none':
+      default:
+        return {
+          text: 'Compartir Cobro',
+          shortText: 'Cobro',
+          Icon: Share2,
+          bgClass: 'bg-emerald-700 hover:bg-emerald-600',
+          badgeColor: 'text-emerald-500 hover:bg-emerald-500/10',
+          iconColor: colors.textColor,
+        };
+    }
+  };
+
+  const shareBtnConfig = getShareButtonConfig();
 
   const theme = CURRENCY_THEMES[selectedCurrency];
   const isBTC = selectedCurrency === 'btc';
@@ -322,9 +404,29 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
             </span>
           </div>
           
-          {/* Quick Swap Direction Badge */}
-          <button
-            onClick={toggleDirection}
+          {/* Header Action Buttons */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {!isMissingData && (
+              <button
+                id="btn-calc-share-top"
+                type="button"
+                onClick={() => setIsShareCalcOpen(true)}
+                style={{ 
+                  backgroundColor: colors.surfaceColor, 
+                  borderColor: colors.borderColor,
+                  color: colors.textColor 
+                }}
+                className={`flex items-center gap-1.5 text-xs font-semibold border ${theme.borderHover} px-2.5 py-1.5 rounded shadow-2xs transition-colors cursor-pointer hover:border-emerald-500`}
+                title={shareBtnConfig.text}
+              >
+                <shareBtnConfig.Icon size={13} style={{ color: shareBtnConfig.iconColor }} />
+                <span className="hidden xs:inline">{shareBtnConfig.shortText}</span>
+              </button>
+            )}
+
+            {/* Quick Swap Direction Badge */}
+            <button
+              onClick={toggleDirection}
             style={{ 
               backgroundColor: colors.surfaceColor, 
               borderColor: colors.borderColor,
@@ -347,6 +449,7 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
             </span>
           </button>
         </div>
+      </div>
 
         {/* Currency Selector Pills con Código de Color */}
         <div 
@@ -625,11 +728,26 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
               : ''
           }`}
         >
-          <div 
-            style={{ color: isMissingData ? '#EF4444' : colors.mutedTextColor }}
-            className="text-[11px] uppercase tracking-wider font-bold mb-1"
-          >
-            {resultTitle}
+          <div className="flex items-center justify-between mb-1">
+            <div 
+              style={{ color: isMissingData ? '#EF4444' : colors.mutedTextColor }}
+              className="text-[11px] uppercase tracking-wider font-bold"
+            >
+              {resultTitle}
+            </div>
+            {!isMissingData && (
+              <button
+                id="btn-calc-share-badge"
+                type="button"
+                onClick={() => setIsShareCalcOpen(true)}
+                style={{ color: colors.mutedTextColor }}
+                className={`p-1 ${shareBtnConfig.badgeColor} rounded transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-semibold`}
+                title={shareBtnConfig.text}
+              >
+                <shareBtnConfig.Icon size={13} />
+                <span>{shareBtnConfig.shortText}</span>
+              </button>
+            )}
           </div>
           <div className={`text-3xl sm:text-4xl font-black tracking-tight leading-none break-all ${
             isMissingData ? 'text-[#EF4444]' : theme.textResult
@@ -642,6 +760,20 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
           >
             {subTextDisplay}
           </div>
+
+          {!isMissingData && (
+            <div className="mt-3.5 pt-3 border-t border-black/5 dark:border-white/10">
+              <button
+                id="btn-calc-share-main"
+                type="button"
+                onClick={() => setIsShareCalcOpen(true)}
+                className={`w-full py-2.5 px-3 rounded-lg ${shareBtnConfig.bgClass} active:scale-98 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer`}
+              >
+                <shareBtnConfig.Icon size={16} />
+                <span>{shareBtnConfig.text}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Ficha técnica informativa de Oro (Onza · Kilo · Gramo) */}
@@ -753,6 +885,21 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
                   1 $ = Bs. {rates.usdt?.price || 'FALTA DE DATOS'}
                 </div>
               </div>
+            </div>
+
+            <div className="mt-2.5 pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-xs">
+              <span style={{ color: colors.mutedTextColor }} className="text-[10px]">
+                ¿Cobrando a un cliente o deuda pendiente?
+              </span>
+              <button
+                id="btn-comparativa-share-link"
+                type="button"
+                onClick={() => setIsShareCalcOpen(true)}
+                className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <shareBtnConfig.Icon size={12} />
+                <span>{shareBtnConfig.text}</span>
+              </button>
             </div>
           </div>
         )}
@@ -940,6 +1087,24 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
           {new Date().toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
         </p>
       </div>
+
+      {/* Modal de Compartir Cobro / Cálculo con Medios de Pago */}
+      <ShareCalculationModal
+        isOpen={isShareCalcOpen}
+        onClose={() => setIsShareCalcOpen(false)}
+        rates={rates}
+        selectedCurrency={selectedCurrency}
+        conversionDirection={conversionDirection}
+        amount={amount}
+        resultDisplay={resultDisplay}
+        subTextDisplay={subTextDisplay}
+        resultTitle={resultTitle}
+        bcvEquivalent={bcvEquivalent}
+        usdtEquivalent={usdtEquivalent}
+        goldUnit={goldUnit}
+        initialPaymentMethod={paymentMethod}
+        onPaymentMethodChange={(m) => setPaymentMethod(m)}
+      />
     </div>
   );
 };

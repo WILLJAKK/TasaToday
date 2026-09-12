@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { toBlob } from 'html-to-image';
 import { 
   X, Check, Copy, Share2, RefreshCw,
   Smartphone, DollarSign, Coins, Ban, Landmark
 } from 'lucide-react';
-import { toPng } from 'html-to-image';
 import { ExchangeRatesData, SelectedCurrency } from '../types';
 import { 
   buildDynamicShareText, 
@@ -86,30 +86,51 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  // Persistir en localStorage
+  // Recargar datos actualizados al abrir el modal
   useEffect(() => {
+    if (isOpen) {
+      try {
+        const savedMethod = localStorage.getItem('tasadolar_share_payment_method') as PaymentOption;
+        if (savedMethod) setPaymentMethod(savedMethod);
+        const savedPM = localStorage.getItem('tasadolar_pm_data');
+        if (savedPM) setPagoMovil(JSON.parse(savedPM));
+        const savedZelle = localStorage.getItem('tasadolar_zelle_data');
+        if (savedZelle) setZelle(JSON.parse(savedZelle));
+        const savedUsdt = localStorage.getItem('tasadolar_usdt_data');
+        if (savedUsdt) setUsdt(JSON.parse(savedUsdt));
+      } catch {}
+    }
+  }, [isOpen]);
+
+  // Persistir en localStorage solo cuando el modal está activo
+  useEffect(() => {
+    if (!isOpen) return;
     try {
       localStorage.setItem('tasadolar_share_payment_method', paymentMethod);
+      window.dispatchEvent(new CustomEvent('payment-method-changed', { detail: paymentMethod }));
     } catch {}
-  }, [paymentMethod]);
+  }, [paymentMethod, isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
     try {
       localStorage.setItem('tasadolar_pm_data', JSON.stringify(pagoMovil));
     } catch {}
-  }, [pagoMovil]);
+  }, [pagoMovil, isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
     try {
       localStorage.setItem('tasadolar_zelle_data', JSON.stringify(zelle));
     } catch {}
-  }, [zelle]);
+  }, [zelle, isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
     try {
       localStorage.setItem('tasadolar_usdt_data', JSON.stringify(usdt));
     } catch {}
-  }, [usdt]);
+  }, [usdt, isOpen]);
 
   const handleCopySingleField = async (text: string, fieldId: string) => {
     if (!text || !text.trim()) return;
@@ -128,14 +149,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       setTimeout(() => setCopiedField(null), 2000);
     }
   };
-
-  // Estado de la captura PNG
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [captureError, setCaptureError] = useState<string | null>(null);
-
-  // Referencia al componente visual que será capturado como PNG
-  const cardToCaptureRef = useRef<HTMLDivElement>(null);
 
   // Sincronizar target cuando cambia defaultCurrency
   useEffect(() => {
@@ -181,45 +194,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           btc: rates.btc?.price,
           oro: rates.oro?.price,
         },
-        'https://tasadolar.app',
         new Date(),
         paymentPayload
       )
     : buildDynamicShareText({
         currencyLabel: activeData.label,
         price: priceDisplay,
-        appLink: 'https://tasadolar.app',
         paymentDetails: paymentPayload,
       });
 
-  // 1. CAPTURA DE LA VISTA (VIEW SHOT / HTML TO PNG)
-  const generatePngCapture = useCallback(async () => {
-    if (!cardToCaptureRef.current) return;
-    setIsCapturing(true);
-    setCaptureError(null);
-
-    try {
-      // Pequeño delay para asegurar renderizado de tipografías
-      await new Promise(resolve => setTimeout(resolve, 80));
-      
-      const dataUrl = await toPng(cardToCaptureRef.current, {
-        quality: 1.0,
-        pixelRatio: 2.5, // Ultra alta resolución para que se vea nítida en WhatsApp/móvil
-        cacheBust: true,
-        backgroundColor: colors.surfaceColor,
-      });
-
-      setImageUri(dataUrl);
-    } catch (err: any) {
-      console.error('[Capture Error]:', err);
-      setCaptureError('No se pudo generar la captura en este navegador.');
-    } finally {
-      setIsCapturing(false);
-    }
-  }, [colors.surfaceColor]);
-
-  // Borrar todos los datos de pago colocados para volver a colocar de nuevo y regenerar
-  const handleResetAndRegenerate = useCallback(() => {
+  // Borrar todos los datos de pago colocados
+  const handleResetPaymentData = useCallback(() => {
     setPagoMovil({ banco: '', cedula: '', telefono: '' });
     setZelle({ titular: '', correo: '' });
     setUsdt({ trc20: '', binanceId: '' });
@@ -230,63 +215,49 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       localStorage.removeItem('tasadolar_zelle_data');
       localStorage.removeItem('tasadolar_usdt_data');
     } catch {}
-    setTimeout(() => {
-      generatePngCapture();
-    }, 60);
-  }, [generatePngCapture]);
-
-  // Regenerar captura al abrir el modal o cambiar de moneda / método de pago
-  useEffect(() => {
-    if (isOpen) {
-      const timer = setTimeout(() => {
-        generatePngCapture();
-      }, 250);
-      return () => clearTimeout(timer);
-    } else {
-      setImageUri(null);
-    }
-  }, [isOpen, selectedTarget, paymentMethod, pagoMovil, zelle, usdt, generatePngCapture]);
+  }, []);
 
   if (!isOpen) return null;
 
-  // 3. FUNCIÓN DE COMPARTIR (NATIVE SHARE)
+  // FUNCIÓN DE COMPARTIR NATIVO: Comparte la tarjeta como imagen + plantilla de texto
   const handleNativeShare = async () => {
     try {
-      // Si tenemos la imagen generada y el navegador soporta compartir archivos
-      if (imageUri && typeof navigator !== 'undefined' && 'share' in navigator) {
+      const cardEl = document.getElementById('share-rate-card-capture');
+      if (cardEl && typeof navigator !== 'undefined' && navigator.share) {
         try {
-          const res = await fetch(imageUri);
-          const blob = await res.blob();
-          const file = new File(
-            [blob], 
-            `tasa-${selectedTarget}-today.png`, 
-            { type: 'image/png' }
-          );
-
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: `Tasa ${activeData.label} Today`,
-              text: dynamicMessage,
-              files: [file],
-            });
-            return;
+          const blob = await toBlob(cardEl, {
+            quality: 0.98,
+            pixelRatio: 2.5,
+            backgroundColor: isDark ? '#0B132B' : '#FFFFFF',
+            cacheBust: true,
+          });
+          if (blob) {
+            const file = new File([blob], `Tasa-${selectedTarget.toUpperCase()}.png`, { type: 'image/png' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                text: dynamicMessage,
+                title: 'TasaToday',
+              });
+              return;
+            }
           }
-        } catch (fileShareErr) {
-          console.log('[Native File Share not supported, falling back to text]:', fileShareErr);
+        } catch (e) {
+          console.log('Image share fallback:', e);
         }
 
-        // Fallback: compartir texto nativo
         await navigator.share({
-          title: `Tasa ${activeData.label} Today`,
           text: dynamicMessage,
         });
-      } else {
-        handleCopyText();
+        return;
       }
-    } catch (err) {
-      // Si el usuario canceló el share sheet nativo
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       console.log('Share dismissed or cancelled');
     }
+
+    // Fallback: copiar texto si Web Share no está disponible
+    handleCopyText();
   };
 
   const handleCopyText = async () => {
@@ -385,27 +356,25 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </div>
 
               {/* 
-                1. COMPONENTE VISUAL ENVUELTO CON REF PARA CAPTURA
+                1. COMPONENTE VISUAL DE PREVISUALIZACIÓN
               */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-end">
                   <button
-                    id="btn-regenerar-share"
-                    onClick={handleResetAndRegenerate}
-                    disabled={isCapturing}
-                    style={{ color: colors.usdtColor }}
+                    id="btn-reset-payment-share"
+                    onClick={handleResetPaymentData}
+                    style={{ color: colors.secondaryTextColor }}
                     className="text-[11px] font-semibold flex items-center gap-1 hover:underline cursor-pointer"
-                    title="Borrar datos de pago colocados y regenerar"
+                    title="Limpiar datos de pago colocados"
                   >
-                    <RefreshCw size={11} className={isCapturing ? 'animate-spin' : ''} />
-                    Regenerar
+                    <RefreshCw size={11} />
+                    Limpiar datos
                   </button>
                 </div>
 
-                {/* Contenedor del elemento a capturar */}
+                {/* Contenedor del elemento */}
                 <div 
                   id="share-rate-card-capture"
-                  ref={cardToCaptureRef}
                   style={{
                     backgroundColor: colors.surfaceColor,
                     borderColor: activeData.hex || colors.borderColor,
@@ -486,7 +455,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   {paymentMethod === 'zelle' && (zelle.titular || zelle.correo) && (
                     <div className="mt-2 pt-1.5 border-t border-dashed border-gray-300 dark:border-gray-700 text-[10px] space-y-0.5 text-left font-mono">
                       <div className="font-bold text-purple-600 dark:text-purple-400 truncate">
-                        💵 Zelle: {[zelle.titular, zelle.correo].filter(Boolean).join(' • ')}
+                        💳 Zelle: {[zelle.titular, zelle.correo].filter(Boolean).join(' • ')}
                       </div>
                     </div>
                   )}
@@ -498,23 +467,12 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                     </div>
                   )}
 
-                  {/* Pie de la tarjeta capturada */}
+                  {/* Pie de la tarjeta */}
                   <div className="pt-2 mt-2 border-t border-gray-200/40 flex items-center justify-between text-[10px] text-gray-500 font-mono">
                     <span>TasaToday</span>
                     <span>{new Date().toLocaleDateString('es-VE')}</span>
                   </div>
                 </div>
-
-                {isCapturing && (
-                  <p className="text-[11px] text-center text-gray-400 animate-pulse">
-                    Generando captura en caché...
-                  </p>
-                )}
-                {captureError && (
-                  <p className="text-[11px] text-center text-red-500">
-                    {captureError}
-                  </p>
-                )}
               </div>
 
               {/* 
@@ -953,22 +911,21 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </div>
 
               {/* 
-                BOTÓN ELEGANTE DE COMPARTIR COTIZACIÓN
+                BOTÓN PRINCIPAL: COMPARTIR (VERDE)
               */}
               <div className="pt-2 pb-1">
                 <button
                   id="btn-native-share-trigger"
+                  type="button"
                   onClick={handleNativeShare}
-                  disabled={isCapturing}
-                  style={{ backgroundColor: colors.usdtColor }}
-                  className="w-full text-white py-3.5 px-5 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-md active:scale-[0.99] transition-all cursor-pointer hover:opacity-95 hover:shadow-lg disabled:opacity-60"
+                  className="w-full text-white py-3.5 px-5 rounded-xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-md active:scale-[0.99] transition-all cursor-pointer bg-[#25D366] hover:bg-[#20ba59] hover:shadow-lg"
                 >
                   <Share2 size={19} />
-                  <span>Compartir Cotización</span>
+                  <span>Compartir</span>
                 </button>
                 {copiedText && (
                   <p className="text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-2 flex items-center justify-center gap-1.5 animate-in fade-in">
-                    <Check size={14} /> ¡Copiado al portapapeles!
+                    <Check size={14} /> ¡Plantilla copiada al portapapeles!
                   </p>
                 )}
               </div>

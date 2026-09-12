@@ -9,6 +9,7 @@ export interface ThemeColors {
   mode: ActiveTheme;
   backgroundColor: string;       // Fondo principal de la app
   surfaceColor: string;          // Fondo de tarjetas y paneles
+  cardBg: string;                // Fondo de tarjetas / cuadros interactivos
   headerBackground: string;      // Fondo del header
   headerBorder: string;          // Borde del header
   tabBarBackground: string;      // Fondo del tab bar inferior
@@ -39,6 +40,7 @@ export const themeColors: Record<ActiveTheme, ThemeColors> = {
     mode: 'light',
     backgroundColor: '#EAEAEA',
     surfaceColor: '#FFFFFF',
+    cardBg: '#FFFFFF',
     headerBackground: '#FFFFFF',
     headerBorder: '#DDDDDD',
     tabBarBackground: '#FFFFFF',
@@ -65,6 +67,7 @@ export const themeColors: Record<ActiveTheme, ThemeColors> = {
     mode: 'dark',
     backgroundColor: '#0F172A',     // Slate oscuro profundo
     surfaceColor: '#1E293B',        // Superficie de tarjetas oscura
+    cardBg: '#1E293B',
     headerBackground: '#1E293B',    // Header oscuro
     headerBorder: '#334155',        // Borde sutil oscuro
     tabBarBackground: '#1E293B',    // Tab bar oscuro

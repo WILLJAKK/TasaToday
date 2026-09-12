@@ -12,7 +12,6 @@ export interface PaymentDetailsPayload {
 export interface ShareMessageParams {
   currencyLabel: string;
   price: string;
-  appLink?: string;
   date?: Date;
   paymentDetails?: PaymentDetailsPayload;
 }
@@ -68,7 +67,6 @@ export function formatPaymentDetailsSection(payment?: PaymentDetailsPayload): st
 export function buildDynamicShareText({
   currencyLabel,
   price,
-  appLink = 'https://tasadolar.app',
   date = new Date(),
   paymentDetails,
 }: ShareMessageParams): string {
@@ -94,10 +92,7 @@ export function buildDynamicShareText({
 
   return `Tasa ${currencyLabel}: ${rateFormula}
 ${paymentSection}
-Fecha valor: ${capitalizedDay}, ${formattedDate}
-
-¡Descarga la app! 📲
-${appLink}`.replace(/\n{3,}/g, '\n\n');
+Fecha valor: ${capitalizedDay}, ${formattedDate}`.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /**
@@ -111,7 +106,6 @@ export function buildFullBoardShareText(
     btc?: string | null;
     oro?: string | null;
   },
-  appLink = 'https://tasadolar.app',
   date = new Date(),
   paymentDetails?: PaymentDetailsPayload
 ): string {
@@ -131,8 +125,5 @@ Tasa EURO: 1€ = Bs. ${rates.euro || 'N/D'}
 Tasa BTC: 1 BTC = $ ${rates.btc || 'N/D'}
 Tasa ORO: 1 Oz = $ ${rates.oro || 'N/D'}
 ${paymentSection}
-Fecha valor: ${capitalizedDay}, ${formattedDate}
-
-¡Descarga la app! 📲
-${appLink}`.replace(/\n{3,}/g, '\n\n');
+Fecha valor: ${capitalizedDay}, ${formattedDate}`.replace(/\n{3,}/g, '\n\n').trim();
 }

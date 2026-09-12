@@ -44,3 +44,21 @@ export interface ScanResult {
   confidence: number;
   timestamp: string;
 }
+
+export type PaymentOption = 'none' | 'pago_movil' | 'zelle' | 'usdt';
+
+export interface PagoMovilData {
+  banco: string;
+  cedula: string;
+  telefono: string;
+}
+
+export interface ZelleData {
+  titular: string;
+  correo: string;
+}
+
+export interface UsdtData {
+  trc20: string;
+  binanceId: string;
+}
