@@ -1,18 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tasa Today</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>TasaToday</title>
     <meta name="description" content="Cotizaciones del dólar en Venezuela, calculadora de conversión y tasas oficiales BCV y USDT en tiempo real." />
-    <meta property="og:title" content="Tasa Today" />
+    <meta property="og:title" content="TasaToday" />
     <meta property="og:description" content="Cotizaciones del dólar en Venezuela, calculadora de conversión y tasas oficiales BCV y USDT en tiempo real." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- PWA & Mobile Web App Config -->
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="TasaToday" />
+
+    <!-- Icons & Manifest -->
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
