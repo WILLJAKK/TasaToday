@@ -700,7 +700,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center">
                 <span className="text-emerald-500 font-bold italic text-lg leading-none">$</span>
                 <span className="text-emerald-500 font-black italic text-sm tracking-tight leading-none">Tasa</span>
                 <span className="font-black italic text-sm tracking-tight leading-none text-slate-800 dark:text-slate-100">Today</span>

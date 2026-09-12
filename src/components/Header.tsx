@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({ isPhoneFrame, setIsPhoneFrame, o
           </span>
           <span 
             style={{ color: colors.usdtColor }}
-            className="text-[21px] font-bold italic tracking-[-1px] leading-none ml-1"
+            className="text-[21px] font-bold italic tracking-[-1px] leading-none"
           >
             Tasa
           </span>
