@@ -784,7 +784,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
               <div className="flex items-center">
                 <span className="text-emerald-500 font-bold italic text-lg leading-none">$</span>
                 <span className="text-emerald-500 font-black italic text-sm tracking-tight leading-none">Tasa</span>
-                <span className="font-black italic text-sm tracking-tight leading-none text-slate-800 dark:text-slate-100">Today</span>
+                <span style={{ color: colors.textColor }} className="font-black italic text-sm tracking-tight leading-none">Today</span>
               </div>
             </div>
 
@@ -792,12 +792,12 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2 rounded bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
                 <div className="text-[10px] uppercase font-semibold opacity-70">Monto Base</div>
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{inputDisplay}</div>
+                <div style={{ color: colors.textColor }} className="text-sm font-bold">{inputDisplay}</div>
               </div>
 
               <div className="p-2 rounded bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
                 <div className="text-[10px] uppercase font-semibold opacity-70">Tasa Aplicada</div>
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                <div style={{ color: colors.textColor }} className="text-sm font-bold">
                   {rateDisplayForBox}
                 </div>
               </div>
@@ -820,7 +820,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
             {note.trim() && (
               <div className="p-2 rounded bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10 text-xs">
                 <span className="text-[10px] uppercase font-semibold opacity-70 block">Concepto</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{note.trim()}</span>
+                <span style={{ color: colors.textColor }} className="font-semibold">{note.trim()}</span>
               </div>
             )}
 
@@ -890,7 +890,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                           />
                         </div>
                         {companyName.trim() && (
-                          <span className="text-[10px] font-black text-slate-800 dark:text-slate-100 truncate w-full mt-1 leading-tight">
+                          <span style={{ color: colors.textColor }} className="text-[10px] font-black truncate w-full mt-1 leading-tight">
                             {companyName.trim()}
                           </span>
                         )}
@@ -971,7 +971,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                           />
                         </div>
                         {companyName.trim() && (
-                          <span className="text-[10px] font-black text-slate-800 dark:text-slate-100 truncate w-full mt-1 leading-tight">
+                          <span style={{ color: colors.textColor }} className="text-[10px] font-black truncate w-full mt-1 leading-tight">
                             {companyName.trim()}
                           </span>
                         )}
@@ -1052,7 +1052,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                           />
                         </div>
                         {companyName.trim() && (
-                          <span className="text-[10px] font-black text-slate-800 dark:text-slate-100 truncate w-full mt-1 leading-tight">
+                          <span style={{ color: colors.textColor }} className="text-[10px] font-black truncate w-full mt-1 leading-tight">
                             {companyName.trim()}
                           </span>
                         )}
@@ -1093,7 +1093,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                   <span className="text-[9px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 block">
                     Escanea Y Paga
                   </span>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{companyName.trim() || 'Cobro Inmediato'}</span>
+                  <span style={{ color: colors.textColor }} className="font-bold">{companyName.trim() || 'Cobro Inmediato'}</span>
                 </div>
                 <div className="h-16 w-28 flex items-center justify-end">
                   <img

@@ -801,9 +801,36 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
               </button>
             )}
           </div>
-          <div className={`text-3xl sm:text-4xl font-black tracking-tight leading-none break-all ${
-            isMissingData ? 'text-[#EF4444]' : theme.textResult
-          }`}>
+          <div 
+            style={{
+              color: isMissingData
+                ? '#EF4444'
+                : isDark
+                  ? (selectedCurrency === 'euro'
+                    ? '#60A5FA'
+                    : selectedCurrency === 'bcv'
+                    ? '#FB7185'
+                    : selectedCurrency === 'usdt'
+                    ? '#4ADE80'
+                    : selectedCurrency === 'btc'
+                    ? '#FBBF24'
+                    : selectedCurrency === 'oro'
+                    ? '#FCD34D'
+                    : '#C084FC')
+                  : (selectedCurrency === 'euro'
+                    ? '#003399'
+                    : selectedCurrency === 'bcv'
+                    ? '#8B1538'
+                    : selectedCurrency === 'usdt'
+                    ? '#2C9945'
+                    : selectedCurrency === 'btc'
+                    ? '#D97706'
+                    : selectedCurrency === 'oro'
+                    ? '#B45309'
+                    : '#7C3AED')
+            }}
+            className="text-3xl sm:text-4xl font-black tracking-tight leading-none break-all"
+          >
             {resultDisplay}
           </div>
           <div 
@@ -917,22 +944,24 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
               {/* Oficial: Vinotinto para BCV, Azul para EURO */}
               <div 
                 style={{ 
-                  borderColor: selectedCurrency === 'euro' ? 'rgba(30, 64, 175, 0.3)' : 'rgba(139, 21, 56, 0.3)', 
+                  borderColor: selectedCurrency === 'euro' 
+                    ? (isDark ? 'rgba(96, 165, 250, 0.3)' : 'rgba(30, 64, 175, 0.3)')
+                    : (isDark ? 'rgba(251, 113, 133, 0.3)' : 'rgba(139, 21, 56, 0.3)'), 
                   backgroundColor: selectedCurrency === 'euro'
-                    ? (isDark ? 'rgba(30, 64, 175, 0.15)' : 'rgba(30, 64, 175, 0.05)')
-                    : (isDark ? 'rgba(139, 21, 56, 0.15)' : 'rgba(139, 21, 56, 0.05)')
+                    ? (isDark ? 'rgba(96, 165, 250, 0.15)' : 'rgba(30, 64, 175, 0.05)')
+                    : (isDark ? 'rgba(251, 113, 133, 0.15)' : 'rgba(139, 21, 56, 0.05)')
                 }}
                 className="border rounded p-2"
               >
                 <div 
                   className="text-[10px] uppercase font-bold"
-                  style={{ color: selectedCurrency === 'euro' ? (isDark ? '#93C5FD' : '#1D4ED8') : '#8B1538' }}
+                  style={{ color: selectedCurrency === 'euro' ? (isDark ? '#93C5FD' : '#1D4ED8') : (isDark ? '#FB7185' : '#8B1538') }}
                 >
                   Tasa Oficial ({selectedCurrency === 'euro' ? 'EURO' : 'BCV'})
                 </div>
                 <div 
                   className="text-sm sm:text-base font-bold mt-0.5"
-                  style={{ color: selectedCurrency === 'euro' ? (isDark ? '#93C5FD' : '#1D4ED8') : '#8B1538' }}
+                  style={{ color: selectedCurrency === 'euro' ? (isDark ? '#93C5FD' : '#1D4ED8') : (isDark ? '#FB7185' : '#8B1538') }}
                 >
                   {bcvEquivalent}
                 </div>
@@ -945,11 +974,14 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
 
               {/* USDT: Verde (Color de marca preservado) */}
               <div 
-                style={{ borderColor: 'rgba(44, 153, 69, 0.3)', backgroundColor: isDark ? 'rgba(44, 153, 69, 0.15)' : 'rgba(44, 153, 69, 0.05)' }}
+                style={{ 
+                  borderColor: isDark ? 'rgba(74, 222, 128, 0.3)' : 'rgba(44, 153, 69, 0.3)', 
+                  backgroundColor: isDark ? 'rgba(74, 222, 128, 0.15)' : 'rgba(44, 153, 69, 0.05)' 
+                }}
                 className="border rounded p-2"
               >
-                <div className="text-[10px] uppercase font-bold text-[#2C9945]">Tasa USDT</div>
-                <div className="text-sm sm:text-base font-bold text-[#2C9945] mt-0.5">{usdtEquivalent}</div>
+                <div className="text-[10px] uppercase font-bold" style={{ color: isDark ? '#4ADE80' : '#2C9945' }}>Tasa USDT</div>
+                <div className="text-sm sm:text-base font-bold mt-0.5" style={{ color: isDark ? '#4ADE80' : '#2C9945' }}>{usdtEquivalent}</div>
                 <div style={{ color: colors.mutedTextColor }} className="text-[10px] mt-0.5 font-medium">
                   1 $ = Bs. {rates.usdt?.price || 'FALTA DE DATOS'}
                 </div>
@@ -960,21 +992,35 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
             {diffBsNumber > 0 && (
               <div 
                 style={{ 
-                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : '#F8FAFC',
+                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.7)' : '#F8FAFC',
                   borderColor: colors.borderColor 
                 }}
                 className="mt-2.5 p-2 rounded border flex flex-col sm:flex-row items-center justify-between gap-1.5"
               >
-                <span style={{ color: colors.mutedTextColor }} className="text-[11px] font-semibold flex items-center gap-1.5">
+                <span style={{ color: colors.secondaryTextColor }} className="text-[11px] font-semibold flex items-center gap-1.5">
                   <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
                   Diferencia entre Oficial y USDT:
                 </span>
                 <div className="flex items-center gap-2 font-mono">
-                  <span className="font-bold text-xs text-slate-800 dark:text-slate-100 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded">
+                  <span 
+                    style={{ 
+                      color: isDark ? '#F8FAFC' : '#0F172A',
+                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.06)',
+                      border: isDark ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(0, 0, 0, 0.08)'
+                    }}
+                    className="font-bold text-xs px-2 py-0.5 rounded"
+                  >
                     {diffBsFormatted}
                   </span>
                   <span style={{ color: colors.mutedTextColor }} className="text-[11px] font-bold">≈</span>
-                  <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                  <span 
+                    style={{
+                      color: isDark ? '#34D399' : '#047857',
+                      backgroundColor: isDark ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.1)',
+                      border: isDark ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(16, 185, 129, 0.2)'
+                    }}
+                    className="font-bold text-xs px-2 py-0.5 rounded"
+                  >
                     {diffUsdFormatted}
                   </span>
                 </div>
@@ -989,7 +1035,8 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
                 id="btn-comparativa-share-link"
                 type="button"
                 onClick={() => setIsShareCalcOpen(true)}
-                className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+                style={{ color: isDark ? '#34D399' : '#059669' }}
+                className="text-[11px] font-bold hover:underline flex items-center gap-1 cursor-pointer"
               >
                 <shareBtnConfig.Icon size={12} />
                 <span>{shareBtnConfig.text}</span>
