@@ -15,6 +15,7 @@ import {
   getExistingPushSubscription,
   subscribeToBCVIntervencionPush,
   unsubscribeFromBCVIntervencionPush,
+  triggerTestPushNotification,
 } from '../services/pushNotificationService';
 import {
   PREMIUM_PRODUCT_ID,
@@ -80,6 +81,7 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
   const [pushEnabled, setPushEnabled] = useState<boolean>(false);
   const [isSubscribingPush, setIsSubscribingPush] = useState<boolean>(false);
   const [pushToast, setPushToast] = useState<string | null>(null);
+  const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
 
   useEffect(() => {
     async function checkPush() {
@@ -116,6 +118,19 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
       setPushToast(result.error || 'No se pudo activar las notificaciones.');
       setTimeout(() => setPushToast(null), 4000);
     }
+  };
+
+  const handleTestPush = async () => {
+    setIsTestingPush(true);
+    const result = await triggerTestPushNotification(0);
+    setIsTestingPush(false);
+
+    if (result.success) {
+      setPushToast(result.message || 'Notificación de prueba enviada.');
+    } else {
+      setPushToast(result.error || 'No se pudo enviar la notificación de prueba.');
+    }
+    setTimeout(() => setPushToast(null), 4000);
   };
 
   // Datos de Métodos de Pago guardados para cobros
@@ -666,7 +681,7 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
           )}
 
           {/* Solo el botón de notificaciones push */}
-          <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
+          <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2">
             <button
               id="btn-settings-enable-push"
               type="button"
@@ -695,6 +710,23 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
               </div>
             )}
           </div>
+
+          {pushEnabled && (
+            <button
+              id="btn-settings-test-push"
+              type="button"
+              onClick={handleTestPush}
+              disabled={isTestingPush}
+              style={{
+                borderColor: colors.borderColor,
+                color: colors.textColor,
+              }}
+              className="w-full text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 border cursor-pointer active:scale-95 disabled:opacity-50 hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              <Zap size={14} />
+              <span>{isTestingPush ? 'Enviando prueba...' : 'Probar Notificación Ahora'}</span>
+            </button>
+          )}
         </div>
 
         {/* Descargo Legal de Responsabilidad Financiera (Google Play Financial Services & Apple Guideline 5.1.1) */}
