@@ -2,14 +2,13 @@ import { drizzle } from "drizzle-orm/netlify-db";
 import { getTableName } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
-import * as schema from "./schema.js";
 
 let realDb: any = null;
 
 function getRealDb() {
   if (!realDb && process.env.NETLIFY_DB_URL) {
     try {
-      realDb = drizzle({ schema });
+      realDb = drizzle();
     } catch (err) {
       console.warn("[DB] No se pudo inicializar Netlify DB con NETLIFY_DB_URL:", err);
     }

@@ -317,7 +317,7 @@ export async function triggerTestPushNotification(
               renotify: true,
               requireInteraction: true,
               data: { url: '/?tab=intervencion' },
-            });
+            } as NotificationOptions);
             delivered = true;
           }
         } catch (swErr) {
