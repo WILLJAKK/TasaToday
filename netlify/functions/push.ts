@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { getStore } from '@netlify/blobs';
 import webpush from 'web-push';
 import { eq } from 'drizzle-orm';
@@ -9,18 +11,46 @@ interface VapidKeys {
   privateKey: string;
 }
 
-const configStore = getStore('push-config');
+const VAPID_KEYS_FILE = path.join(process.cwd(), 'vapid_keys.json');
+
+function getConfigStore() {
+  try {
+    return getStore('push-config');
+  } catch {
+    return null;
+  }
+}
+
 let vapidKeysPromise: Promise<VapidKeys> | null = null;
 
 async function getVapidKeys(): Promise<VapidKeys> {
   if (!vapidKeysPromise) {
     vapidKeysPromise = (async () => {
-      const existing = await configStore.get('vapid-keys', { type: 'json' }).catch(() => null);
-      if (existing && (existing as VapidKeys).publicKey && (existing as VapidKeys).privateKey) {
-        return existing as VapidKeys;
+      const store = getConfigStore();
+      if (store) {
+        const existing = await store.get('vapid-keys', { type: 'json' }).catch(() => null);
+        if (existing && (existing as VapidKeys).publicKey && (existing as VapidKeys).privateKey) {
+          return existing as VapidKeys;
+        }
+      } else {
+        try {
+          if (fs.existsSync(VAPID_KEYS_FILE)) {
+            const existing = JSON.parse(fs.readFileSync(VAPID_KEYS_FILE, 'utf8'));
+            if (existing && existing.publicKey && existing.privateKey) {
+              return existing as VapidKeys;
+            }
+          }
+        } catch {}
       }
+
       const generated = webpush.generateVAPIDKeys();
-      await configStore.setJSON('vapid-keys', generated).catch(() => {});
+      if (store) {
+        await store.setJSON('vapid-keys', generated).catch(() => {});
+      } else {
+        try {
+          fs.writeFileSync(VAPID_KEYS_FILE, JSON.stringify(generated, null, 2), 'utf8');
+        } catch {}
+      }
       return generated;
     })();
   }

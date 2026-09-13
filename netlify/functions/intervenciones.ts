@@ -2,6 +2,8 @@
 // Backend Scraper Serverless para Intervenciones Cambiarias del BCV
 // Banco Central de Venezuela (bcv.org.ve/politica-cambiaria/intervencion-cambiaria)
 
+import fs from 'fs';
+import path from 'path';
 import { getStore } from '@netlify/blobs';
 import { broadcastPush } from './push';
 
@@ -16,20 +18,46 @@ export interface IntervencionItem {
   isRecent?: boolean;
 }
 
-const intervencionStore = getStore('intervenciones-state');
+const LAST_INTERVENCION_FILE = path.join(process.cwd(), 'last_intervencion.json');
 const LAST_INTERVENCION_KEY = 'last-known-intervencion';
+
+function getIntervencionStore() {
+  try {
+    return getStore('intervenciones-state');
+  } catch {
+    return null;
+  }
+}
 
 async function checkAndBroadcastNewIntervencion(latestItem: IntervencionItem) {
   if (!latestItem || !latestItem.fecha || !latestItem.nro) return;
 
   const currentId = `${latestItem.nro}_${latestItem.fecha}_${latestItem.tipoCambioBsUsd}`;
 
-  const saved = await intervencionStore.get(LAST_INTERVENCION_KEY, { type: 'json' }).catch(() => null);
-  const lastKnownIntervencionId = (saved as { id?: string } | null)?.id || '';
+  let lastKnownIntervencionId = '';
+  const store = getIntervencionStore();
+
+  if (store) {
+    const saved = await store.get(LAST_INTERVENCION_KEY, { type: 'json' }).catch(() => null);
+    lastKnownIntervencionId = (saved as { id?: string } | null)?.id || '';
+  } else {
+    try {
+      if (fs.existsSync(LAST_INTERVENCION_FILE)) {
+        const saved = JSON.parse(fs.readFileSync(LAST_INTERVENCION_FILE, 'utf8'));
+        lastKnownIntervencionId = saved.id || '';
+      }
+    } catch {}
+  }
 
   if (currentId === lastKnownIntervencionId) return;
 
-  await intervencionStore.setJSON(LAST_INTERVENCION_KEY, { id: currentId, item: latestItem }).catch(() => {});
+  if (store) {
+    await store.setJSON(LAST_INTERVENCION_KEY, { id: currentId, item: latestItem }).catch(() => {});
+  } else {
+    try {
+      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
+    } catch {}
+  }
 
   if (!lastKnownIntervencionId) return;
 
