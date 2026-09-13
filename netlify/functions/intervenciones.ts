@@ -2,6 +2,10 @@
 // Backend Scraper Serverless para Intervenciones Cambiarias del BCV
 // Banco Central de Venezuela (bcv.org.ve/politica-cambiaria/intervencion-cambiaria)
 
+import fs from 'fs';
+import path from 'path';
+import { broadcastPush } from './push';
+
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 export interface IntervencionItem {
@@ -11,6 +15,48 @@ export interface IntervencionItem {
   tipoCambioBsUsd: string;
   paridadEurUsd: string;
   isRecent?: boolean;
+}
+
+const LAST_INTERVENCION_FILE = path.join(process.cwd(), 'last_intervencion.json');
+let lastKnownIntervencionId: string = '';
+
+try {
+  if (fs.existsSync(LAST_INTERVENCION_FILE)) {
+    const saved = JSON.parse(fs.readFileSync(LAST_INTERVENCION_FILE, 'utf8'));
+    lastKnownIntervencionId = saved.id || '';
+  }
+} catch {}
+
+function checkAndBroadcastNewIntervencion(latestItem: IntervencionItem) {
+  if (!latestItem || !latestItem.fecha || !latestItem.nro) return;
+
+  const currentId = `${latestItem.nro}_${latestItem.fecha}_${latestItem.tipoCambioBsUsd}`;
+
+  if (!lastKnownIntervencionId) {
+    lastKnownIntervencionId = currentId;
+    try {
+      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
+    } catch {}
+    return;
+  }
+
+  if (currentId !== lastKnownIntervencionId) {
+    lastKnownIntervencionId = currentId;
+    try {
+      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
+    } catch {}
+
+    broadcastPush({
+      title: '🚨 NUEVA INTERVENCIÓN CAMBIARIA BCV',
+      body: `Intervención N° ${latestItem.nro} (${latestItem.fecha}): Bs. ${latestItem.tipoCambioBsUsd} / USD | Bs. ${latestItem.tipoCambioBsEur} / EUR. Toca para ver detalles.`,
+      tag: `intervencion-${latestItem.nro}-${latestItem.fecha}`,
+      url: '/?tab=intervencion',
+      fecha: latestItem.fecha,
+      nro: latestItem.nro,
+      tipoCambioBsUsd: latestItem.tipoCambioBsUsd,
+      tipoCambioBsEur: latestItem.tipoCambioBsEur,
+    }).catch((err) => console.warn('[PUSH ERROR]:', err));
+  }
 }
 
 interface NetlifyEvent {
@@ -123,6 +169,8 @@ async function scrapeBcvIntervenciones(): Promise<IntervencionItem[]> {
   if (items.length === 0) {
     throw new Error('No se pudieron extraer filas válidas de la tabla del BCV');
   }
+
+  checkAndBroadcastNewIntervencion(items[0]);
 
   return items;
 }

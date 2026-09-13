@@ -99,6 +99,33 @@ export default function App() {
     };
   }, []);
 
+  // Monitorear apertura directa desde notificación push (URL y Service Worker)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'intervencion') {
+        setActiveTab('intervencion');
+      }
+    }
+
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const handleSwMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'OPEN_INTERVENCION') {
+          setActiveTab('intervencion');
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('[PWA SW] Service worker auto-register error:', err);
+      });
+
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+      };
+    }
+  }, []);
+
   // Sincronización continua de estado Premium y bloqueo de anuncios entre componentes
   useEffect(() => {
     const handlePremiumChange = (e: any) => {

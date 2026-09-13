@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import https from 'https';
+import fs from 'fs';
+import webpush from 'web-push';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
@@ -9,6 +11,188 @@ const PORT = 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// =========================================================================
+// MOTOR DE NOTIFICACIONES PUSH DE PRIMER PLANO (WEB PUSH / SERVICE WORKER)
+// Diseñado para enviar alertas de máxima prioridad a teléfonos bloqueados y apps cerradas
+// =========================================================================
+
+const VAPID_KEYS_FILE = path.join(process.cwd(), 'vapid_keys.json');
+let vapidKeys: { publicKey: string; privateKey: string };
+
+try {
+  if (fs.existsSync(VAPID_KEYS_FILE)) {
+    vapidKeys = JSON.parse(fs.readFileSync(VAPID_KEYS_FILE, 'utf8'));
+  } else {
+    vapidKeys = webpush.generateVAPIDKeys();
+    fs.writeFileSync(VAPID_KEYS_FILE, JSON.stringify(vapidKeys, null, 2), 'utf8');
+  }
+} catch {
+  vapidKeys = webpush.generateVAPIDKeys();
+}
+
+webpush.setVapidDetails(
+  'mailto:notificaciones@tasatoday.com',
+  vapidKeys.publicKey,
+  vapidKeys.privateKey
+);
+
+const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'push_subscriptions.json');
+let pushSubscriptions: Array<webpush.PushSubscription & { createdAt?: string }> = [];
+
+try {
+  if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
+    pushSubscriptions = JSON.parse(fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf8'));
+  }
+} catch {
+  pushSubscriptions = [];
+}
+
+function saveSubscriptions() {
+  try {
+    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(pushSubscriptions, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[PUSH] Error al guardar push_subscriptions.json:', err);
+  }
+}
+
+// Registro de tokens nativos para iOS (Apple APNs) y Android (Google FCM / Play Store)
+const NATIVE_TOKENS_FILE = path.join(process.cwd(), 'native_device_tokens.json');
+interface NativeDeviceToken {
+  token: string;
+  platform: 'ios' | 'android' | string;
+  createdAt: string;
+}
+let nativeDeviceTokens: NativeDeviceToken[] = [];
+
+try {
+  if (fs.existsSync(NATIVE_TOKENS_FILE)) {
+    nativeDeviceTokens = JSON.parse(fs.readFileSync(NATIVE_TOKENS_FILE, 'utf8'));
+  }
+} catch {
+  nativeDeviceTokens = [];
+}
+
+function saveNativeTokens() {
+  try {
+    fs.writeFileSync(NATIVE_TOKENS_FILE, JSON.stringify(nativeDeviceTokens, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[PUSH] Error al guardar native_device_tokens.json:', err);
+  }
+}
+
+// Envío a todos los suscriptores con URGENCY: HIGH para despertar la pantalla
+async function broadcastPushNotification(payload: {
+  title: string;
+  body: string;
+  tag?: string;
+  url?: string;
+  fecha?: string;
+  nro?: string;
+  tipoCambioBsUsd?: string;
+  tipoCambioBsEur?: string;
+}) {
+  if (pushSubscriptions.length === 0) {
+    console.log('[PUSH] No hay suscriptores registrados actualmente.');
+    return;
+  }
+
+  console.log(`[PUSH] Transmitiendo notificación de alta prioridad a ${pushSubscriptions.length} dispositivos: ${payload.title}`);
+
+  const stringifiedPayload = JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    icon: '/icon.png',
+    badge: '/icon.png',
+    tag: payload.tag || `intervencion-bcv-${Date.now()}`,
+    url: payload.url || '/?tab=intervencion',
+    fecha: payload.fecha || '',
+    nro: payload.nro || '',
+    tipoCambioBsUsd: payload.tipoCambioBsUsd || '',
+    tipoCambioBsEur: payload.tipoCambioBsEur || '',
+    timestamp: Date.now(),
+  });
+
+  const sendOptions = {
+    TTL: 86400, // Mantener en cola hasta 24 horas si el teléfono está apagado
+    urgency: 'high' as const, // Máxima prioridad en Android FCM y Apple APNs
+    topic: 'intervencion-bcv',
+  };
+
+  const deadEndpoints: string[] = [];
+
+  const promises = pushSubscriptions.map(async (sub) => {
+    try {
+      await webpush.sendNotification(sub, stringifiedPayload, sendOptions);
+    } catch (err: any) {
+      if (err?.statusCode === 404 || err?.statusCode === 410) {
+        deadEndpoints.push(sub.endpoint);
+      } else {
+        console.warn(`[PUSH] Falló entrega a ${sub.endpoint.slice(0, 35)}...`, err?.message);
+      }
+    }
+  });
+
+  await Promise.allSettled(promises);
+
+  if (deadEndpoints.length > 0) {
+    pushSubscriptions = pushSubscriptions.filter((s) => !deadEndpoints.includes(s.endpoint));
+    saveSubscriptions();
+    console.log(`[PUSH] Se descartaron ${deadEndpoints.length} suscripciones caducadas.`);
+  }
+}
+
+// Detección automática de nueva intervención cambiaria del BCV
+const LAST_INTERVENCION_FILE = path.join(process.cwd(), 'last_intervencion.json');
+let lastKnownIntervencionId: string = '';
+
+try {
+  if (fs.existsSync(LAST_INTERVENCION_FILE)) {
+    const saved = JSON.parse(fs.readFileSync(LAST_INTERVENCION_FILE, 'utf8'));
+    lastKnownIntervencionId = saved.id || '';
+  }
+} catch {}
+
+function checkAndNotifyNewIntervencion(latestItem: {
+  fecha: string;
+  nro: string;
+  tipoCambioBsEur: string;
+  tipoCambioBsUsd: string;
+}) {
+  if (!latestItem || !latestItem.fecha || !latestItem.nro) return;
+
+  const currentId = `${latestItem.nro}_${latestItem.fecha}_${latestItem.tipoCambioBsUsd}`;
+
+  // Si no había guardada ninguna, se registra como referencia inicial
+  if (!lastKnownIntervencionId) {
+    lastKnownIntervencionId = currentId;
+    try {
+      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
+    } catch {}
+    return;
+  }
+
+  // Si la intervención detectada es distinta a la anterior -> ¡DISPARAR PUSH INMEDIATO!
+  if (currentId !== lastKnownIntervencionId) {
+    console.log(`[BCV ALERTA] 🚨 ¡NUEVA INTERVENCIÓN CAMBIARIA DETECTADA!: N° ${latestItem.nro} (${latestItem.fecha})`);
+
+    lastKnownIntervencionId = currentId;
+    try {
+      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
+    } catch {}
+
+    broadcastPushNotification({
+      title: '🚨 NUEVA INTERVENCIÓN CAMBIARIA BCV',
+      body: `Intervención N° ${latestItem.nro} (${latestItem.fecha}): Bs. ${latestItem.tipoCambioBsUsd} / USD | Bs. ${latestItem.tipoCambioBsEur} / EUR. Toca para ver detalles.`,
+      tag: `intervencion-${latestItem.nro}-${latestItem.fecha}`,
+      url: '/?tab=intervencion',
+      fecha: latestItem.fecha,
+      nro: latestItem.nro,
+      tipoCambioBsUsd: latestItem.tipoCambioBsUsd,
+      tipoCambioBsEur: latestItem.tipoCambioBsEur,
+    });
+  }
+}
 
 // In-memory cache to prevent excessive hammering on BCV
 let cachedBcvData: { usd: number; eur: number; date: string } | null = null;
@@ -574,6 +758,7 @@ async function scrapeIntervenciones(): Promise<Array<{ fecha: string; nro: strin
       }
 
       if (items.length > 0) {
+        checkAndNotifyNewIntervencion(items[0]);
         return items;
       }
     }
@@ -587,15 +772,34 @@ async function scrapeIntervenciones(): Promise<Array<{ fecha: string; nro: strin
 let cachedIntervenciones: any = null;
 let lastIntervencionesCache = 0;
 
+// Monitor en segundo plano: consulta intervenciones del BCV cada 60 segundos
+async function monitorBCVIntervencionesBackground() {
+  try {
+    const list = await scrapeIntervenciones();
+    if (list && list.length > 0) {
+      checkAndNotifyNewIntervencion(list[0]);
+    }
+  } catch (err) {
+    console.warn('[PUSH MONITOR] Error consultando intervenciones en segundo plano:', err);
+  }
+}
+
+// Iniciar monitoreo continuo
+setTimeout(monitorBCVIntervencionesBackground, 5000);
+setInterval(monitorBCVIntervencionesBackground, 60 * 1000);
+
 app.get('/api/intervenciones', async (req, res) => {
   const now = Date.now();
-  if (cachedIntervenciones && now - lastIntervencionesCache < 120000) {
+  if (cachedIntervenciones && now - lastIntervencionesCache < 60000) {
     res.json(cachedIntervenciones);
     return;
   }
 
   try {
     const list = await scrapeIntervenciones();
+    if (list && list.length > 0) {
+      checkAndNotifyNewIntervencion(list[0]);
+    }
     const paridad = (cachedRatesData && cachedRatesData.euro?.numPrice && cachedRatesData.bcv?.numPrice)
       ? (cachedRatesData.euro.numPrice / cachedRatesData.bcv.numPrice)
       : 1.1633;
@@ -621,6 +825,111 @@ app.get('/api/intervenciones', async (req, res) => {
       updatedAt: new Date().toISOString(),
     });
   }
+});
+
+// =========================================================================
+// RUTAS DE NOTIFICACIONES PUSH (WEB PUSH / SERVICE WORKER)
+// =========================================================================
+
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: vapidKeys.publicKey });
+});
+
+app.post('/api/push/subscribe', (req, res) => {
+  const { subscription } = req.body;
+  if (!subscription || !subscription.endpoint || !subscription.keys) {
+    res.status(400).json({ error: 'Objeto de suscripción inválido' });
+    return;
+  }
+
+  const exists = pushSubscriptions.some((s) => s.endpoint === subscription.endpoint);
+  if (!exists) {
+    pushSubscriptions.push({ ...subscription, createdAt: new Date().toISOString() });
+    saveSubscriptions();
+    console.log(`[PUSH] Nuevo dispositivo registrado. Total activos: ${pushSubscriptions.length}`);
+  }
+
+  res.json({ success: true, count: pushSubscriptions.length });
+});
+
+app.post('/api/push/unsubscribe', (req, res) => {
+  const { endpoint } = req.body;
+  if (endpoint) {
+    pushSubscriptions = pushSubscriptions.filter((s) => s.endpoint !== endpoint);
+    saveSubscriptions();
+  }
+  res.json({ success: true });
+});
+
+app.post('/api/push/test', (req, res) => {
+  const delaySeconds = Number(req.body?.delaySeconds) || 0;
+  const sample = (cachedIntervenciones?.latest) || FALLBACK_INTERVENCIONES[0];
+
+  const doSend = async () => {
+    await broadcastPushNotification({
+      title: '🚨 PRUEBA: NUEVA INTERVENCIÓN BCV',
+      body: `Intervención N° ${sample.nro} (${sample.fecha}): Bs. ${sample.tipoCambioBsUsd} / USD | Bs. ${sample.tipoCambioBsEur} / EUR. Notificación de primer plano entregada.`,
+      tag: 'prueba-intervencion-' + Date.now(),
+      url: '/?tab=intervencion',
+      fecha: sample.fecha,
+      nro: sample.nro,
+      tipoCambioBsUsd: sample.tipoCambioBsUsd,
+      tipoCambioBsEur: sample.tipoCambioBsEur,
+    });
+  };
+
+  if (delaySeconds > 0) {
+    setTimeout(doSend, delaySeconds * 1000);
+    res.json({
+      success: true,
+      message: `Notificación de prueba programada para enviarse en ${delaySeconds} segundos. Bloquea tu teléfono o sal de la app ahora para probar.`,
+    });
+  } else {
+    doSend();
+    res.json({
+      success: true,
+      message: 'Notificación de prueba de primer plano transmitida a todos los dispositivos registrados.',
+    });
+  }
+});
+
+app.post('/api/push/native-register', (req, res) => {
+  const { token, platform } = req.body;
+  if (!token) {
+    res.status(400).json({ error: 'Token de dispositivo nativo requerido' });
+    return;
+  }
+
+  const exists = nativeDeviceTokens.some((t) => t.token === token);
+  if (!exists) {
+    nativeDeviceTokens.push({
+      token,
+      platform: platform || 'unknown',
+      createdAt: new Date().toISOString(),
+    });
+    saveNativeTokens();
+    console.log(`[PUSH NATIVO] Dispositivo ${platform || 'móvil'} registrado para App Store/Play Store. Total nativos: ${nativeDeviceTokens.length}`);
+  }
+
+  res.json({ success: true, count: nativeDeviceTokens.length });
+});
+
+app.post('/api/push/native-unregister', (req, res) => {
+  const { token } = req.body;
+  if (token) {
+    nativeDeviceTokens = nativeDeviceTokens.filter((t) => t.token !== token);
+    saveNativeTokens();
+  }
+  res.json({ success: true });
+});
+
+app.get('/api/push/status', (req, res) => {
+  res.json({
+    configured: true,
+    subscribersCount: pushSubscriptions.length,
+    nativeSubscribersCount: nativeDeviceTokens.length,
+    lastKnownIntervencionId,
+  });
 });
 
 app.get('/api/health', (req, res) => {

@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { IntervencionItem } from '../types';
-import { Landmark, Bell, BellRing, RefreshCw, CheckCircle2, ExternalLink, Calendar, Search, ShieldCheck } from 'lucide-react';
+import { 
+  Landmark, Bell, BellRing, RefreshCw, CheckCircle2, ExternalLink, Calendar, 
+  Search, ShieldCheck, Zap, Smartphone, AlertTriangle, Lock, Info, HelpCircle
+} from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import {
+  isPushNotificationSupported,
+  getNotificationPermission,
+  subscribeToBCVIntervencionPush,
+  unsubscribeFromBCVIntervencionPush,
+  getExistingPushSubscription,
+} from '../services/pushNotificationService';
 
 interface IntervencionViewProps {
   onRefresh?: () => void;
@@ -11,16 +21,8 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
   const [intervenciones, setIntervenciones] = useState<IntervencionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [pushEnabled, setPushEnabled] = useState<boolean>(() => {
-    try {
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        return Notification.permission === 'granted';
-      }
-    } catch {
-      // Ignorar restricciones en entornos aislados
-    }
-    return false;
-  });
+  const [pushEnabled, setPushEnabled] = useState<boolean>(false);
+  const [isSubscribing, setIsSubscribing] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const { colors, isDark } = useTheme();
@@ -29,8 +31,19 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 4500);
+    }, 5500);
   };
+
+  // Verificar estado de suscripción real del Service Worker al montar
+  useEffect(() => {
+    async function checkSubscription() {
+      if (isPushNotificationSupported()) {
+        const sub = await getExistingPushSubscription();
+        setPushEnabled(!!sub);
+      }
+    }
+    checkSubscription();
+  }, []);
 
   const safeStorageGet = (key: string): string | null => {
     try {
@@ -48,23 +61,6 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
       }
     } catch {}
   };
-
-  const triggerPushNotification = useCallback((item: IntervencionItem) => {
-    try {
-      if (
-        typeof window !== 'undefined' &&
-        'Notification' in window &&
-        Notification.permission === 'granted'
-      ) {
-        new Notification('Nueva Intervención BCV', {
-          body: `Nro: ${item.nro} - EUR: ${item.tipoCambioBsEur}`,
-        });
-      }
-    } catch {
-      // Manejo de restricciones en Safari o iframes
-    }
-    showToast(`🔔 Nueva Intervención BCV: Nro: ${item.nro} - EUR: ${item.tipoCambioBsEur}`);
-  }, []);
 
   const fetchIntervenciones = useCallback(async (isManual = false) => {
     setLoading(true);
@@ -87,11 +83,6 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
         const latest = rawList[0];
         if (latest) {
           const currentKey = `${latest.nro}_${latest.fecha}`;
-          const savedKey = safeStorageGet('last_known_intervencion');
-
-          if (savedKey && savedKey !== currentKey) {
-            triggerPushNotification(latest);
-          }
           safeStorageSet('last_known_intervencion', currentKey);
         }
 
@@ -107,50 +98,35 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
     } finally {
       setLoading(false);
     }
-  }, [triggerPushNotification]);
+  }, []);
 
   useEffect(() => {
     fetchIntervenciones();
   }, [fetchIntervenciones]);
 
-  const requestPushPermission = async () => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      showToast('Tu navegador no soporta la API de notificaciones.');
+  // Activar Notificaciones de Primer Plano (Web Push)
+  const handleTogglePush = async () => {
+    if (pushEnabled) {
+      setIsSubscribing(true);
+      const ok = await unsubscribeFromBCVIntervencionPush();
+      if (ok) {
+        setPushEnabled(false);
+        showToast('Notificaciones push desactivadas.');
+      }
+      setIsSubscribing(false);
       return;
     }
 
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        setPushEnabled(true);
-        showToast('¡Notificaciones Push activadas para nuevas intervenciones!');
-        try {
-          new Notification('Nueva Intervención BCV', {
-            body: 'Notificaciones activadas. Recibirás una alerta cada vez que el BCV publique una intervención.',
-          });
-        } catch {}
-      } else {
-        setPushEnabled(false);
-        showToast('Permiso de notificación denegado por el usuario.');
-      }
-    } catch {
-      showToast('No se pudo solicitar permisos de notificación en este dispositivo.');
+    setIsSubscribing(true);
+    const result = await subscribeToBCVIntervencionPush();
+    setIsSubscribing(false);
+
+    if (result.success) {
+      setPushEnabled(true);
+      showToast('¡Notificaciones Push de Primer Plano activadas! Recibirás la alerta aun con pantalla bloqueada.');
+    } else {
+      showToast(result.error || 'No se pudo activar las notificaciones.');
     }
-  };
-
-  const handleTestNotification = () => {
-    const sample = intervenciones[0];
-    if (!sample) return;
-
-    try {
-      if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification('Nueva Intervención BCV', {
-          body: `Nro: ${sample.nro} - EUR: ${sample.tipoCambioBsEur}`,
-        });
-      }
-    } catch {}
-
-    showToast(`🔔 Notificación de prueba: Nro: ${sample.nro} - EUR: ${sample.tipoCambioBsEur}`);
   };
 
   const filteredIntervenciones = intervenciones.filter((item) => {
@@ -226,50 +202,70 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
             </button>
           </div>
 
-          {/* Estado y Activación de Notificaciones Push */}
+          {/* Notificaciones Push */}
           <div
+            id="card-bcv-push-notification"
             style={{
-              backgroundColor: isDark ? '#1E293B' : '#F9FAFB',
+              backgroundColor: colors.surfaceColor,
               borderColor: colors.borderColor,
             }}
-            className="mt-2.5 pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 border rounded-xs"
+            className="mt-3 p-3.5 border rounded-lg transition-all space-y-3"
           >
-            <div className="flex items-center gap-2">
-              {pushEnabled ? (
-                <div className="flex items-center gap-1.5 text-[#2C9945] text-[11px] font-semibold">
-                  <CheckCircle2 size={15} />
-                  <span>Notificaciones Push Activas</span>
-                </div>
-              ) : (
-                <div style={{ color: colors.secondaryTextColor }} className="flex items-center gap-1.5 text-[11px] font-medium">
-                  <Bell size={15} className="text-gray-400" />
-                  <span>Avisar cuando publiquen nueva intervención</span>
-                </div>
-              )}
+            <div className="flex items-start gap-3">
+              <div
+                style={{
+                  backgroundColor: pushEnabled
+                    ? (isDark ? 'rgba(44, 153, 69, 0.2)' : '#DCFCE7')
+                    : (isDark ? 'rgba(100, 116, 139, 0.2)' : '#F1F5F9'),
+                  color: pushEnabled ? '#2C9945' : colors.mutedTextColor,
+                }}
+                className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-2xs mt-0.5"
+              >
+                <Bell size={18} className={pushEnabled ? 'animate-bounce' : ''} />
+              </div>
+              <div className="flex-1 space-y-1">
+                <h3
+                  style={{ color: colors.textColor }}
+                  className="font-bold text-sm leading-snug"
+                >
+                  Notificaciones Push
+                </h3>
+                <p
+                  style={{ color: colors.secondaryTextColor }}
+                  className="text-xs leading-relaxed"
+                >
+                  Se te avisará con una notificación al teléfono en el momento que se publique una intervención en el Banco Central de Venezuela (www.bcv.org.ve).
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              {!pushEnabled ? (
-                <button
-                  id="btn-enable-push"
-                  onClick={requestPushPermission}
-                  className="bg-[#2C9945] hover:bg-[#25823a] text-white text-[10px] sm:text-[11px] font-bold px-2.5 py-1.5 rounded-xs transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
-                >
-                  <BellRing size={12} />
-                  Activar Notificaciones
-                </button>
-              ) : (
-                <button
-                  id="btn-test-push"
-                  onClick={handleTestNotification}
-                  style={{
-                    backgroundColor: isDark ? '#334155' : '#E2E8F0',
-                    color: colors.textColor,
-                  }}
-                  className="text-[10px] sm:text-[11px] font-semibold px-2 py-1 rounded-xs transition-colors cursor-pointer hover:opacity-80"
-                >
-                  Probar Push
-                </button>
+            {/* Solo el botón de notificaciones push */}
+            <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
+              <button
+                id="btn-enable-push"
+                onClick={handleTogglePush}
+                disabled={isSubscribing}
+                className={`w-full sm:w-auto text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50 ${
+                  pushEnabled
+                    ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100'
+                    : 'bg-[#2C9945] hover:bg-[#25823a] text-white'
+                }`}
+              >
+                <Bell size={14} />
+                <span>
+                  {isSubscribing
+                    ? 'Procesando...'
+                    : pushEnabled
+                    ? 'Desactivar Notificaciones Push'
+                    : 'Activar Notificaciones Push'}
+                </span>
+              </button>
+
+              {pushEnabled && (
+                <div className="hidden sm:flex items-center gap-1.5 text-[#2C9945] text-xs font-bold">
+                  <CheckCircle2 size={16} />
+                  <span>Activas</span>
+                </div>
               )}
             </div>
           </div>

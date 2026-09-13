@@ -5,11 +5,17 @@ import { LegalModal } from './LegalModal';
 import { 
   Star, ShieldCheck, Play, Sliders, Check, RotateCcw, 
   AlertCircle, FileText, ChevronRight, Smartphone, DollarSign, Coins, Ban, Landmark,
-  Building2, ImagePlus, Upload, Trash2
+  Building2, ImagePlus, Upload, Trash2, QrCode, Bell, BellRing, Zap, Lock, Info
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { useTheme } from '../context/ThemeContext';
 import { getStoredTasamiRate, saveTasamiRate, formatTasamiRate } from '../utils/tasami';
+import {
+  isPushNotificationSupported,
+  getExistingPushSubscription,
+  subscribeToBCVIntervencionPush,
+  unsubscribeFromBCVIntervencionPush,
+} from '../services/pushNotificationService';
 import {
   PREMIUM_PRODUCT_ID,
   PREMIUM_PRODUCT_PRICE,
@@ -69,6 +75,48 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'eula' | 'privacy'>('eula');
   const [rateToast, setRateToast] = useState<string | null>(null);
+
+  // Estados de Notificaciones Push
+  const [pushEnabled, setPushEnabled] = useState<boolean>(false);
+  const [isSubscribingPush, setIsSubscribingPush] = useState<boolean>(false);
+  const [pushToast, setPushToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function checkPush() {
+      if (isPushNotificationSupported()) {
+        const sub = await getExistingPushSubscription();
+        setPushEnabled(!!sub);
+      }
+    }
+    checkPush();
+  }, []);
+
+  const handleTogglePush = async () => {
+    if (pushEnabled) {
+      setIsSubscribingPush(true);
+      const ok = await unsubscribeFromBCVIntervencionPush();
+      if (ok) {
+        setPushEnabled(false);
+        setPushToast('Notificaciones push desactivadas.');
+        setTimeout(() => setPushToast(null), 4000);
+      }
+      setIsSubscribingPush(false);
+      return;
+    }
+
+    setIsSubscribingPush(true);
+    const result = await subscribeToBCVIntervencionPush();
+    setIsSubscribingPush(false);
+
+    if (result.success) {
+      setPushEnabled(true);
+      setPushToast('¡Notificaciones Push activadas!');
+      setTimeout(() => setPushToast(null), 4000);
+    } else {
+      setPushToast(result.error || 'No se pudo activar las notificaciones.');
+      setTimeout(() => setPushToast(null), 4000);
+    }
+  };
 
   // Datos de Métodos de Pago guardados para cobros
   const [paymentMethod, setPaymentMethod] = useState<PaymentOption>(() => {
@@ -580,6 +628,75 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
           )}
         </div>
 
+        {/* Notificaciones Push */}
+        <div
+          id="card-settings-push-notifications"
+          style={{
+            backgroundColor: colors.surfaceColor,
+            borderColor: colors.borderColor,
+          }}
+          className="p-4 rounded-xs border shadow-xs transition-colors duration-200 space-y-3"
+        >
+          <div className="flex items-start gap-3">
+            <div
+              style={{
+                backgroundColor: pushEnabled
+                  ? (isDark ? 'rgba(44, 153, 69, 0.2)' : '#DCFCE7')
+                  : (isDark ? 'rgba(100, 116, 139, 0.2)' : '#F1F5F9'),
+                color: pushEnabled ? '#2C9945' : colors.mutedTextColor,
+              }}
+              className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-2xs mt-0.5"
+            >
+              <Bell size={18} className={pushEnabled ? 'animate-bounce' : ''} />
+            </div>
+            <div className="flex-1 space-y-1">
+              <h3 style={{ color: colors.textColor }} className="font-bold text-sm leading-snug">
+                Notificaciones Push
+              </h3>
+              <p style={{ color: colors.secondaryTextColor }} className="text-xs leading-relaxed">
+                Se te avisará con una notificación al teléfono en el momento que se publique una intervención en el Banco Central de Venezuela (www.bcv.org.ve).
+              </p>
+            </div>
+          </div>
+
+          {pushToast && (
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 text-emerald-800 dark:text-emerald-300 rounded text-xs font-medium">
+              {pushToast}
+            </div>
+          )}
+
+          {/* Solo el botón de notificaciones push */}
+          <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
+            <button
+              id="btn-settings-enable-push"
+              type="button"
+              onClick={handleTogglePush}
+              disabled={isSubscribingPush}
+              className={`w-full sm:w-auto text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50 ${
+                pushEnabled
+                  ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100'
+                  : 'bg-[#2C9945] hover:bg-[#25823a] text-white'
+              }`}
+            >
+              <Bell size={14} />
+              <span>
+                {isSubscribingPush
+                  ? 'Procesando...'
+                  : pushEnabled
+                  ? 'Desactivar Notificaciones Push'
+                  : 'Activar Notificaciones Push'}
+              </span>
+            </button>
+
+            {pushEnabled && (
+              <div className="hidden sm:flex items-center gap-1.5 text-[#2C9945] text-xs font-bold">
+                <Check size={16} />
+                <span>Activas</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Descargo Legal de Responsabilidad Financiera (Google Play Financial Services & Apple Guideline 5.1.1) */}
         <div 
           id="card-settings-financial-disclaimer"
@@ -858,34 +975,39 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
               </div>
             </div>
 
-            {/* SECCIÓN 4: LOGO Y EMPRESA COBRADORA */}
+            {/* SECCIÓN 4: QR PARA PAGOS INMEDIATOS O LOGO */}
             <div 
+              id="card-settings-payment-qr"
               style={{ backgroundColor: isDark ? '#0F172A' : '#F8FAFC', borderColor: colors.borderColor }}
               className="p-3 rounded-lg border space-y-2.5"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                  <Building2 size={14} />
-                  <span>Logo de Empresa Cobradora (Planilla)</span>
+                  <QrCode size={15} />
+                  <span>Coloca tu QR para pago inmediato O coloca el logo de tu empresa</span>
                 </div>
                 {companyLogo ? (
-                  <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
+                  <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 shrink-0 ml-2">
                     <Check size={12} /> Guardado
                   </span>
                 ) : (
-                  <span style={{ color: colors.secondaryTextColor }} className="text-[10px]">
+                  <span style={{ color: colors.secondaryTextColor }} className="text-[10px] shrink-0 ml-2">
                     Opcional
                   </span>
                 )}
               </div>
 
+              <p style={{ color: colors.secondaryTextColor }} className="text-[11px] leading-relaxed">
+                Agrega el código QR para cobros inmediatos (Pago Móvil, Zelle o Binance) o el logo de tu empresa. En la plantilla de cobro se ubicará de forma destacada con la indicación <strong className="text-emerald-600 dark:text-emerald-400">Escanea Y Paga</strong> justo encima de la foto.
+              </p>
+
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 {companyLogo ? (
                   <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                    <div className="w-14 h-14 rounded-lg bg-white dark:bg-slate-900 border border-slate-700/30 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+                    <div className="w-16 h-16 rounded-lg bg-white dark:bg-slate-900 border border-slate-700/30 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
                       <img 
                         src={companyLogo} 
-                        alt="Logo Empresa" 
+                        alt="QR de Pago o Logo" 
                         className="max-h-full max-w-full object-contain"
                         referrerPolicy="no-referrer"
                       />
@@ -895,7 +1017,7 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
                         className="px-2.5 py-1.5 rounded border border-emerald-500/40 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         <Upload size={12} />
-                        Cambiar
+                        Cambiar QR / Logo
                         <input
                           type="file"
                           accept="image/*"
@@ -915,8 +1037,8 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
                   </div>
                 ) : (
                   <label className="w-full py-2.5 px-3 rounded-lg border-2 border-dashed border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer">
-                    <ImagePlus size={16} />
-                    <span>Subir Logo desde tu Teléfono</span>
+                    <QrCode size={16} />
+                    <span>Subir QR o Logo desde tu Teléfono</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -928,11 +1050,11 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
 
                 <div className="w-full sm:flex-1">
                   <label style={{ color: colors.secondaryTextColor }} className="block text-[10px] font-bold mb-1 uppercase">
-                    Nombre Comercial / Empresa
+                    Nombre del Negocio o Titular (Opcional)
                   </label>
                   <input
                     type="text"
-                    placeholder="Ej: Inversiones Ávila C.A."
+                    placeholder="Ej: Inversiones Ávila / Tu Nombre"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     style={{

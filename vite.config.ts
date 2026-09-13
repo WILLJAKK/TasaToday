@@ -107,6 +107,33 @@ function apiRatesDevPlugin(): Plugin {
             return;
           }
         }
+        if (req.url && req.url.startsWith('/api/push')) {
+          try {
+            let body = '';
+            req.on('data', (chunk) => { body += chunk; });
+            await new Promise((resolve) => req.on('end', resolve));
+
+            const mod = await server.ssrLoadModule('/netlify/functions/push.ts');
+            const result = await mod.handler({
+              httpMethod: req.method || 'GET',
+              path: req.url,
+              body,
+            });
+            res.statusCode = result.statusCode || 200;
+            if (result.headers) {
+              for (const [k, v] of Object.entries(result.headers)) {
+                res.setHeader(k, v as string);
+              }
+            }
+            res.end(result.body);
+            return;
+          } catch (e: any) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: e?.message }));
+            return;
+          }
+        }
         next();
       });
     },

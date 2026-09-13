@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ExchangeRatesData, SelectedCurrency, GoldUnit, TROY_OZ_PER_KG, GRAMS_PER_TROY_OZ, PaymentOption } from '../types';
 import { AdBanner } from './AdBanner';
-import { ArrowRightLeft, Calculator, TrendingUp, RotateCcw, Delete, Share2, Smartphone, DollarSign, Coins } from 'lucide-react';
+import { ArrowRightLeft, Calculator, TrendingUp, Share2, Smartphone, DollarSign, Coins } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { ShareCalculationModal } from './ShareCalculationModal';
 import { getStoredTasamiRate, formatTasamiRate } from '../utils/tasami';
@@ -289,6 +289,10 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
   let resultTitle = '';
   let bcvEquivalent = '';
   let usdtEquivalent = '';
+  let diffBsNumber = 0;
+  let diffUsdNumber = 0;
+  let diffBsFormatted = '';
+  let diffUsdFormatted = '';
 
   if (isMissingData) {
     // REGLA 4: Si el estado es "FALTA DE DATOS", deshabilitar cualquier cálculo
@@ -357,7 +361,12 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
       }
     }
   } else {
-    const symbol = selectedCurrency === 'euro' ? '€' : '$';
+    const isEuro = selectedCurrency === 'euro';
+    const symbol = isEuro ? '€' : '$';
+    const officialRateItem = isEuro ? rates.euro : rates.bcv;
+    const officialNumPrice = officialRateItem?.numPrice || 0;
+    const usdtNumPrice = rates.usdt?.numPrice || 0;
+
     if (conversionDirection === 'USD_TO_BS') {
       const totalBs = validAmount * currentRate;
       resultTitle = 'Total en Bolívares';
@@ -365,18 +374,43 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
       subTextDisplay = isTasami
         ? `Calculado a TasaMi personalizada (Bs. ${activeItem?.price || '0'} por $)`
         : `Calculado a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
-      bcvEquivalent = rates.bcv?.numPrice ? `Bs. ${(validAmount * rates.bcv.numPrice).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'FALTA DE DATOS';
-      usdtEquivalent = rates.usdt?.numPrice ? `Bs. ${(validAmount * rates.usdt.numPrice).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'FALTA DE DATOS';
+      bcvEquivalent = officialNumPrice > 0 
+        ? `Bs. ${(validAmount * officialNumPrice).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+        : 'FALTA DE DATOS';
+      usdtEquivalent = usdtNumPrice > 0 
+        ? `Bs. ${(validAmount * usdtNumPrice).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+        : 'FALTA DE DATOS';
+
+      if (officialNumPrice > 0 && usdtNumPrice > 0 && validAmount > 0) {
+        const oficialBs = validAmount * officialNumPrice;
+        const usdtBs = validAmount * usdtNumPrice;
+        diffBsNumber = Math.abs(usdtBs - oficialBs);
+        diffUsdNumber = diffBsNumber / usdtNumPrice;
+      }
     } else {
       const converted = validAmount > 0 && currentRate > 0 ? validAmount / currentRate : 0;
-      resultTitle = selectedCurrency === 'euro' ? 'Total en Euros' : 'Total en Dólares';
+      resultTitle = isEuro ? 'Total en Euros' : 'Total en Dólares';
       resultDisplay = `${symbol} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       subTextDisplay = isTasami
         ? `Equivalente en Dólares a TasaMi personalizada (Bs. ${activeItem?.price || '0'} por $)`
-        : `Equivalente en ${selectedCurrency === 'euro' ? 'Euros' : 'Dólares'} a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
-      bcvEquivalent = rates.bcv?.numPrice ? `$ ${(validAmount / rates.bcv.numPrice).toFixed(2).replace('.', ',')}` : 'FALTA DE DATOS';
-      usdtEquivalent = rates.usdt?.numPrice ? `$ ${(validAmount / rates.usdt.numPrice).toFixed(2).replace('.', ',')}` : 'FALTA DE DATOS';
+        : `Equivalente en ${isEuro ? 'Euros' : 'Dólares'} a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
+      bcvEquivalent = officialNumPrice > 0 
+        ? `${isEuro ? '€' : '$'} ${(validAmount / officialNumPrice).toFixed(2).replace('.', ',')}` 
+        : 'FALTA DE DATOS';
+      usdtEquivalent = usdtNumPrice > 0 
+        ? `$ ${(validAmount / usdtNumPrice).toFixed(2).replace('.', ',')}` 
+        : 'FALTA DE DATOS';
+
+      if (officialNumPrice > 0 && usdtNumPrice > 0 && validAmount > 0) {
+        const unitsAtOficial = validAmount / officialNumPrice;
+        const bsCostAtUsdt = unitsAtOficial * usdtNumPrice;
+        diffBsNumber = Math.abs(bsCostAtUsdt - validAmount);
+        diffUsdNumber = diffBsNumber / usdtNumPrice;
+      }
     }
+
+    diffBsFormatted = `Bs. ${diffBsNumber.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    diffUsdFormatted = `$ ${diffUsdNumber.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
   const toggleDirection = () => {
@@ -397,42 +431,6 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
       }
     }
     setSelectedCurrency(curr);
-  };
-
-  // Virtual Keypad handlers for fast mobile entry
-  const handleKeypadPress = (val: string) => {
-    if (isMissingData) return;
-    if (val === 'C') {
-      setAmount('');
-      return;
-    }
-    if (val === 'BACK') {
-      setAmount(amount.slice(0, -1));
-      return;
-    }
-    if (val === '.') {
-      if (!amount.includes('.')) {
-        setAmount(amount === '' ? '0.' : amount + '.');
-      }
-      return;
-    }
-    // Append number
-    if (amount === '0' && val !== '.') {
-      setAmount(val);
-    } else {
-      setAmount(amount + val);
-    }
-  };
-
-  const addValue = (delta: number) => {
-    if (isMissingData) return;
-    const current = parseFloat(amount || '0') || 0;
-    const nextVal = current + delta;
-    if (delta < 1) {
-      setAmount(parseFloat(nextVal.toFixed(6)).toString());
-    } else {
-      setAmount(Math.round(nextVal).toString());
-    }
   };
 
   return (
@@ -493,8 +491,8 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
                 ? (conversionDirection === 'USD_TO_BS' ? 'BTC ➔ $' : '$ ➔ BTC')
                 : isOro
                   ? (conversionDirection === 'USD_TO_BS' 
-                      ? (goldUnit === 'kg' ? 'Kg ➔ $' : 'Oz ➔ $') 
-                      : (goldUnit === 'kg' ? '$ ➔ Kg' : '$ ➔ Oz'))
+                      ? (goldUnit === 'kg' ? 'Kg ➔ $' : goldUnit === 'g' ? 'G ➔ $' : 'Oz ➔ $') 
+                      : (goldUnit === 'kg' ? '$ ➔ Kg' : goldUnit === 'g' ? '$ ➔ G' : '$ ➔ Oz'))
                   : (conversionDirection === 'USD_TO_BS'
                       ? (selectedCurrency === 'euro' ? '€ ➔ Bs.' : '$ ➔ Bs.')
                       : (selectedCurrency === 'euro' ? 'Bs. ➔ €' : 'Bs. ➔ $'))
@@ -893,7 +891,7 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
           </div>
         )}
 
-        {/* Comparativa Simultánea BCV (Vinotinto) vs. USDT (Verde) */}
+        {/* Comparativa Simultánea BCV/EURO (Oficial) vs. USDT (Verde) */}
         {!isMissingData && validAmount > 0 && selectedCurrency !== 'btc' && selectedCurrency !== 'oro' && (
           <div 
             style={{ 
@@ -908,7 +906,7 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
             >
               <span className="flex items-center gap-1.5">
                 <TrendingUp size={14} className={theme.textAccent} />
-                Comparativa BCV vs. USDT
+                {selectedCurrency === 'euro' ? 'Comparativa EURO Oficial vs. USDT' : 'Comparativa BCV vs. USDT'}
               </span>
               <span style={{ color: colors.mutedTextColor }} className="text-[10px] font-normal">
                 Mismo monto en ambas tasas
@@ -916,15 +914,32 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-center">
-              {/* BCV: Vinotinto (Color de marca preservado) */}
+              {/* Oficial: Vinotinto para BCV, Azul para EURO */}
               <div 
-                style={{ borderColor: 'rgba(139, 21, 56, 0.3)', backgroundColor: isDark ? 'rgba(139, 21, 56, 0.15)' : 'rgba(139, 21, 56, 0.05)' }}
+                style={{ 
+                  borderColor: selectedCurrency === 'euro' ? 'rgba(30, 64, 175, 0.3)' : 'rgba(139, 21, 56, 0.3)', 
+                  backgroundColor: selectedCurrency === 'euro'
+                    ? (isDark ? 'rgba(30, 64, 175, 0.15)' : 'rgba(30, 64, 175, 0.05)')
+                    : (isDark ? 'rgba(139, 21, 56, 0.15)' : 'rgba(139, 21, 56, 0.05)')
+                }}
                 className="border rounded p-2"
               >
-                <div className="text-[10px] uppercase font-bold text-[#8B1538]">Tasa Oficial (BCV)</div>
-                <div className="text-sm sm:text-base font-bold text-[#8B1538] mt-0.5">{bcvEquivalent}</div>
+                <div 
+                  className="text-[10px] uppercase font-bold"
+                  style={{ color: selectedCurrency === 'euro' ? (isDark ? '#93C5FD' : '#1D4ED8') : '#8B1538' }}
+                >
+                  Tasa Oficial ({selectedCurrency === 'euro' ? 'EURO' : 'BCV'})
+                </div>
+                <div 
+                  className="text-sm sm:text-base font-bold mt-0.5"
+                  style={{ color: selectedCurrency === 'euro' ? (isDark ? '#93C5FD' : '#1D4ED8') : '#8B1538' }}
+                >
+                  {bcvEquivalent}
+                </div>
                 <div style={{ color: colors.mutedTextColor }} className="text-[10px] mt-0.5 font-medium">
-                  1 $ = Bs. {rates.bcv?.price || 'FALTA DE DATOS'}
+                  {selectedCurrency === 'euro' 
+                    ? `1 € = Bs. ${rates.euro?.price || 'FALTA DE DATOS'}`
+                    : `1 $ = Bs. ${rates.bcv?.price || 'FALTA DE DATOS'}`}
                 </div>
               </div>
 
@@ -940,6 +955,31 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* Diferencia siempre colocada debajo, bien calculada en Bs. y en $ */}
+            {diffBsNumber > 0 && (
+              <div 
+                style={{ 
+                  backgroundColor: isDark ? 'rgba(30, 41, 59, 0.5)' : '#F8FAFC',
+                  borderColor: colors.borderColor 
+                }}
+                className="mt-2.5 p-2 rounded border flex flex-col sm:flex-row items-center justify-between gap-1.5"
+              >
+                <span style={{ color: colors.mutedTextColor }} className="text-[11px] font-semibold flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                  Diferencia entre Oficial y USDT:
+                </span>
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-100 bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded">
+                    {diffBsFormatted}
+                  </span>
+                  <span style={{ color: colors.mutedTextColor }} className="text-[11px] font-bold">≈</span>
+                  <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                    {diffUsdFormatted}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="mt-2.5 pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between text-xs">
               <span style={{ color: colors.mutedTextColor }} className="text-[10px]">
@@ -957,157 +997,6 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
             </div>
           </div>
         )}
-
-        {/* Teclado Táctil Integrado */}
-        <div 
-          style={{ 
-            backgroundColor: colors.surfaceColor, 
-            borderColor: colors.borderColor 
-          }}
-          className={`border rounded-lg p-2.5 shadow-2xs transition-opacity ${
-            isMissingData ? 'opacity-40 pointer-events-none select-none' : ''
-          }`}
-        >
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span 
-              style={{ color: colors.mutedTextColor }}
-              className="text-[11px] font-bold uppercase tracking-wider"
-            >
-              {isMissingData ? 'Teclado Bloqueado (Falta de Datos)' : 'Teclado Numérico'}
-            </span>
-            <div className="flex items-center gap-1.5">
-              {(isBTC
-                ? (conversionDirection === 'USD_TO_BS' ? [0.001, 0.01, 0.05, 0.1] : [10, 50, 100, 500])
-                : [1, 5, 10, 50]
-              ).map((inc) => (
-                <button
-                  key={inc}
-                  onClick={() => addValue(inc)}
-                  style={{
-                    backgroundColor: isDark ? '#334155' : '#F1F5F9',
-                    color: colors.textColor,
-                  }}
-                  className="text-[11px] font-semibold hover:opacity-80 px-2 py-0.5 rounded cursor-pointer transition-opacity"
-                >
-                  +{inc}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-4 gap-1.5">
-            {['7', '8', '9'].map((num) => (
-              <button
-                key={num}
-                onClick={() => handleKeypadPress(num)}
-                style={{
-                  backgroundColor: isDark ? '#334155' : '#F8FAFC',
-                  color: colors.textColor,
-                  borderColor: colors.borderColor,
-                }}
-                className="hover:opacity-90 active:scale-98 font-bold text-lg py-2.5 rounded border transition-all shadow-2xs cursor-pointer"
-              >
-                {num}
-              </button>
-            ))}
-            <button
-              onClick={() => handleKeypadPress('BACK')}
-              style={{
-                backgroundColor: isDark ? 'rgba(217, 119, 6, 0.2)' : '#FEF3C7',
-                color: isDark ? '#FCD34D' : '#92400E',
-                borderColor: isDark ? 'rgba(217, 119, 6, 0.4)' : '#FDE68A',
-              }}
-              className="font-bold py-2.5 rounded border flex items-center justify-center transition-colors shadow-2xs hover:opacity-90 cursor-pointer"
-              title="Borrar último dígito"
-            >
-              <Delete size={18} />
-            </button>
-
-            {['4', '5', '6'].map((num) => (
-              <button
-                key={num}
-                onClick={() => handleKeypadPress(num)}
-                style={{
-                  backgroundColor: isDark ? '#334155' : '#F8FAFC',
-                  color: colors.textColor,
-                  borderColor: colors.borderColor,
-                }}
-                className="hover:opacity-90 active:scale-98 font-bold text-lg py-2.5 rounded border transition-all shadow-2xs cursor-pointer"
-              >
-                {num}
-              </button>
-            ))}
-            <button
-              onClick={() => handleKeypadPress('C')}
-              style={{
-                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FFE4E6',
-                color: isDark ? '#FCA5A5' : '#BE123C',
-                borderColor: isDark ? 'rgba(239, 68, 68, 0.4)' : '#FECDD3',
-              }}
-              className="font-bold text-sm py-2.5 rounded border transition-colors shadow-2xs flex items-center justify-center gap-1 hover:opacity-90 cursor-pointer"
-              title="Borrar todo"
-            >
-              <RotateCcw size={14} />
-              <span>C</span>
-            </button>
-
-            {['1', '2', '3'].map((num) => (
-              <button
-                key={num}
-                onClick={() => handleKeypadPress(num)}
-                style={{
-                  backgroundColor: isDark ? '#334155' : '#F8FAFC',
-                  color: colors.textColor,
-                  borderColor: colors.borderColor,
-                }}
-                className="hover:opacity-90 active:scale-98 font-bold text-lg py-2.5 rounded border transition-all shadow-2xs cursor-pointer"
-              >
-                {num}
-              </button>
-            ))}
-            <button
-              onClick={toggleDirection}
-              className={`${theme.activeDirectionBg} hover:opacity-90 active:scale-95 text-white font-bold text-xs py-2.5 rounded transition-all shadow-2xs flex items-center justify-center cursor-pointer`}
-              title="Invertir dirección"
-            >
-              <ArrowRightLeft size={16} />
-            </button>
-
-            <button
-              onClick={() => handleKeypadPress('0')}
-              style={{
-                backgroundColor: isDark ? '#334155' : '#F8FAFC',
-                color: colors.textColor,
-                borderColor: colors.borderColor,
-              }}
-              className="col-span-2 hover:opacity-90 active:scale-98 font-bold text-lg py-2.5 rounded border transition-all shadow-2xs cursor-pointer"
-            >
-              0
-            </button>
-            <button
-              onClick={() => handleKeypadPress('.')}
-              style={{
-                backgroundColor: isDark ? '#334155' : '#F8FAFC',
-                color: colors.textColor,
-                borderColor: colors.borderColor,
-              }}
-              className="hover:opacity-90 active:scale-98 font-black text-xl py-2.5 rounded border transition-all shadow-2xs cursor-pointer"
-            >
-              ,
-            </button>
-            <button
-              onClick={() => handleKeypadPress('00')}
-              style={{
-                backgroundColor: isDark ? '#334155' : '#F8FAFC',
-                color: colors.textColor,
-                borderColor: colors.borderColor,
-              }}
-              className="hover:opacity-90 active:scale-98 font-bold text-sm py-2.5 rounded border transition-all shadow-2xs cursor-pointer"
-            >
-              00
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Banner de Anuncios / AdBanner */}

@@ -7,7 +7,9 @@ import {
   PaymentOption, 
   PagoMovilData, 
   ZelleData, 
-  UsdtData 
+  UsdtData,
+  TROY_OZ_PER_KG,
+  GRAMS_PER_TROY_OZ
 } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { getStoredTasamiRate, formatTasamiRate } from '../utils/tasami';
@@ -25,7 +27,8 @@ import {
   ImagePlus,
   Building2,
   Trash2,
-  Upload
+  Upload,
+  QrCode
 } from 'lucide-react';
 
 interface ShareCalculationModalProps {
@@ -361,10 +364,83 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
     day: 'numeric',
   });
 
-  const currencySymbol = selectedCurrency === 'euro' ? '€' : selectedCurrency === 'btc' ? 'BTC' : selectedCurrency === 'oro' ? (goldUnit || 'Oz') : '$';
-  const inputDisplay = conversionDirection === 'USD_TO_BS' 
-    ? `${amount} ${currencySymbol}` 
-    : `Bs. ${amount}`;
+  const isOro = selectedCurrency === 'oro';
+  const isBTC = selectedCurrency === 'btc';
+
+  // Cálculo de cotización real de Oro según unidad seleccionada
+  const goldOzPrice = rates.oro?.numPrice || 0;
+  const effectiveGoldRate = goldUnit === 'kg'
+    ? goldOzPrice * TROY_OZ_PER_KG
+    : goldUnit === 'g'
+      ? goldOzPrice / GRAMS_PER_TROY_OZ
+      : goldOzPrice;
+  const effectiveGoldRateFormatted = effectiveGoldRate.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  // Tasa para mostrar en la caja "Tasa Aplicada"
+  let rateDisplayForBox = `Bs. ${ratePriceFormatted}`;
+  // Fórmula descriptiva para la plantilla de texto
+  let rateFormula = `1$ = Bs. ${ratePriceFormatted}`;
+
+  if (isOro) {
+    if (goldUnit === 'kg') {
+      rateDisplayForBox = `$ ${effectiveGoldRateFormatted} / Kg`;
+      rateFormula = `1 Kg = $ ${effectiveGoldRateFormatted}`;
+    } else if (goldUnit === 'g') {
+      rateDisplayForBox = `$ ${effectiveGoldRateFormatted} / g`;
+      rateFormula = `1 g = $ ${effectiveGoldRateFormatted}`;
+    } else {
+      rateDisplayForBox = `$ ${effectiveGoldRateFormatted} / Oz`;
+      rateFormula = `1 Oz = $ ${effectiveGoldRateFormatted}`;
+    }
+  } else if (isBTC) {
+    rateDisplayForBox = `$ ${rates.btc?.price || ratePriceFormatted}`;
+    rateFormula = `1 BTC = $ ${rates.btc?.price || ratePriceFormatted}`;
+  } else if (selectedCurrency === 'euro') {
+    rateDisplayForBox = `Bs. ${ratePriceFormatted}`;
+    rateFormula = `1€ = Bs. ${ratePriceFormatted}`;
+  }
+
+  // Formatear monto base con separadores de miles
+  const formatInputAmount = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return '0';
+    const parts = trimmed.split('.');
+    const intPart = Number(parts[0]);
+    if (isNaN(intPart)) return trimmed;
+    const formattedInt = intPart.toLocaleString('en-US');
+    return parts.length > 1 ? `${formattedInt}.${parts[1]}` : formattedInt;
+  };
+
+  let inputDisplay = '';
+  if (isOro) {
+    if (conversionDirection === 'USD_TO_BS') {
+      const unitLabel = goldUnit === 'kg' ? 'Kg' : goldUnit === 'g' ? 'g' : 'Oz';
+      inputDisplay = `${formatInputAmount(amount)} ${unitLabel} Oro`;
+    } else {
+      inputDisplay = `$ ${formatInputAmount(amount)}`;
+    }
+  } else if (isBTC) {
+    if (conversionDirection === 'USD_TO_BS') {
+      inputDisplay = `${amount} BTC`;
+    } else {
+      inputDisplay = `$ ${formatInputAmount(amount)}`;
+    }
+  } else if (selectedCurrency === 'euro') {
+    if (conversionDirection === 'USD_TO_BS') {
+      inputDisplay = `${formatInputAmount(amount)} €`;
+    } else {
+      inputDisplay = `Bs. ${formatInputAmount(amount)}`;
+    }
+  } else {
+    if (conversionDirection === 'USD_TO_BS') {
+      inputDisplay = `$ ${formatInputAmount(amount)}`;
+    } else {
+      inputDisplay = `Bs. ${formatInputAmount(amount)}`;
+    }
+  };
 
   // Construir plantilla completa estrictamente en texto
   const buildShareText = useCallback(() => {
@@ -376,10 +452,6 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
     const formattedDate = `${day}/${month}/${year}`;
 
     const lines: string[] = [];
-    const isCryptoRate = selectedCurrency === 'btc' || selectedCurrency === 'oro';
-    const rateFormula = isCryptoRate 
-      ? `1 ${selectedCurrency.toUpperCase()} = $ ${ratePriceFormatted}` 
-      : `1$ = Bs. ${ratePriceFormatted}`;
 
     lines.push(`Tasa ${currencyNames[selectedCurrency]}: ${rateFormula}`);
     lines.push(`Monto a pagar: ${resultDisplay} (${inputDisplay})`);
@@ -426,7 +498,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
     lines.push(`Fecha valor: ${capitalizedDay}, ${formattedDate}`);
 
     return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-  }, [selectedCurrency, ratePriceFormatted, resultDisplay, inputDisplay, companyName, note, paymentMethod, pagoMovil, zelle, usdt, now]);
+  }, [selectedCurrency, rateFormula, resultDisplay, inputDisplay, companyName, note, paymentMethod, pagoMovil, zelle, usdt, now]);
 
   // Manejar copiado de campo individual
   const handleCopyField = async (text: string, fieldId: string) => {
@@ -726,7 +798,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
               <div className="p-2 rounded bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/10">
                 <div className="text-[10px] uppercase font-semibold opacity-70">Tasa Aplicada</div>
                 <div className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                  Bs. {ratePriceFormatted}
+                  {rateDisplayForBox}
                 </div>
               </div>
             </div>
@@ -797,19 +869,22 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                       )}
                     </div>
 
-                    {/* Logo de empresa cobradora (espacio marcado por el usuario) */}
+                    {/* QR para pago inmediato o Logo (espacio marcado por el usuario) */}
                     {companyLogo ? (
                       <div
                         onClick={() => !isGenerating && logoFileInputRef.current?.click()}
                         className={`w-28 sm:w-36 shrink-0 rounded-xl bg-white/95 dark:bg-slate-900/90 border border-slate-700/30 p-1.5 flex flex-col items-center justify-center text-center shadow-xs overflow-hidden relative ${
                           !isGenerating ? 'cursor-pointer hover:border-emerald-500 transition-all group' : ''
                         }`}
-                        title={!isGenerating ? 'Toca para cambiar el logo' : undefined}
+                        title={!isGenerating ? 'Toca para cambiar QR o logo' : undefined}
                       >
+                        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 leading-tight mb-1 text-center">
+                          Escanea Y Paga
+                        </span>
                         <div className="flex-1 w-full flex items-center justify-center min-h-[58px]">
                           <img
                             src={companyLogo}
-                            alt={companyName || "Logo Empresa"}
+                            alt={companyName || "QR de Pago o Logo"}
                             className="max-h-20 max-w-full object-contain drop-shadow-xs"
                             referrerPolicy="no-referrer"
                           />
@@ -819,12 +894,9 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                             {companyName.trim()}
                           </span>
                         )}
-                        <span className="text-[8px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                          Cobrador
-                        </span>
                         {!isGenerating && (
                           <div className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] font-bold rounded-xl backdrop-blur-[1px]">
-                            Cambiar logo
+                            Cambiar
                           </div>
                         )}
                       </div>
@@ -834,12 +906,12 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                         onClick={() => logoFileInputRef.current?.click()}
                         className="w-28 sm:w-36 shrink-0 rounded-xl border-2 border-dashed border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10 flex flex-col items-center justify-center p-2 text-center transition-all cursor-pointer group"
                       >
-                        <ImagePlus size={22} className="text-emerald-500 mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 leading-tight">
-                          + Subir Logo
+                        <QrCode size={22} className="text-emerald-500 mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 leading-tight mb-0.5">
+                          Escanea Y Paga
                         </span>
-                        <span className="text-[8px] opacity-60 leading-tight mt-0.5">
-                          Empresa Cobradora
+                        <span className="text-[8px] opacity-70 leading-tight">
+                          + Subir QR o Logo
                         </span>
                       </button>
                     ) : null}
@@ -885,12 +957,15 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                         className={`w-28 sm:w-36 shrink-0 rounded-xl bg-white/95 dark:bg-slate-900/90 border border-slate-700/30 p-1.5 flex flex-col items-center justify-center text-center shadow-xs overflow-hidden relative ${
                           !isGenerating ? 'cursor-pointer hover:border-purple-500 transition-all group' : ''
                         }`}
-                        title={!isGenerating ? 'Toca para cambiar el logo' : undefined}
+                        title={!isGenerating ? 'Toca para cambiar QR o logo' : undefined}
                       >
+                        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 leading-tight mb-1 text-center">
+                          Escanea Y Paga
+                        </span>
                         <div className="flex-1 w-full flex items-center justify-center min-h-[58px]">
                           <img
                             src={companyLogo}
-                            alt={companyName || "Logo Empresa"}
+                            alt={companyName || "QR de Pago o Logo"}
                             className="max-h-20 max-w-full object-contain drop-shadow-xs"
                             referrerPolicy="no-referrer"
                           />
@@ -900,12 +975,9 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                             {companyName.trim()}
                           </span>
                         )}
-                        <span className="text-[8px] uppercase tracking-wider font-bold text-purple-600 dark:text-purple-400 mt-0.5">
-                          Cobrador
-                        </span>
                         {!isGenerating && (
                           <div className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] font-bold rounded-xl backdrop-blur-[1px]">
-                            Cambiar logo
+                            Cambiar
                           </div>
                         )}
                       </div>
@@ -915,12 +987,12 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                         onClick={() => logoFileInputRef.current?.click()}
                         className="w-28 sm:w-36 shrink-0 rounded-xl border-2 border-dashed border-purple-500/40 hover:border-purple-500 bg-purple-500/5 hover:bg-purple-500/10 flex flex-col items-center justify-center p-2 text-center transition-all cursor-pointer group"
                       >
-                        <ImagePlus size={22} className="text-purple-500 mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 leading-tight">
-                          + Subir Logo
+                        <QrCode size={22} className="text-purple-500 mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 leading-tight mb-0.5">
+                          Escanea Y Paga
                         </span>
-                        <span className="text-[8px] opacity-60 leading-tight mt-0.5">
-                          Empresa Cobradora
+                        <span className="text-[8px] opacity-70 leading-tight">
+                          + Subir QR o Logo
                         </span>
                       </button>
                     ) : null}
@@ -966,12 +1038,15 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                         className={`w-28 sm:w-36 shrink-0 rounded-xl bg-white/95 dark:bg-slate-900/90 border border-slate-700/30 p-1.5 flex flex-col items-center justify-center text-center shadow-xs overflow-hidden relative ${
                           !isGenerating ? 'cursor-pointer hover:border-amber-500 transition-all group' : ''
                         }`}
-                        title={!isGenerating ? 'Toca para cambiar el logo' : undefined}
+                        title={!isGenerating ? 'Toca para cambiar QR o logo' : undefined}
                       >
+                        <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-amber-500 leading-tight mb-1 text-center">
+                          Escanea Y Paga
+                        </span>
                         <div className="flex-1 w-full flex items-center justify-center min-h-[58px]">
                           <img
                             src={companyLogo}
-                            alt={companyName || "Logo Empresa"}
+                            alt={companyName || "QR de Pago o Logo"}
                             className="max-h-20 max-w-full object-contain drop-shadow-xs"
                             referrerPolicy="no-referrer"
                           />
@@ -981,12 +1056,9 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                             {companyName.trim()}
                           </span>
                         )}
-                        <span className="text-[8px] uppercase tracking-wider font-bold text-amber-500 mt-0.5">
-                          Cobrador
-                        </span>
                         {!isGenerating && (
                           <div className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] font-bold rounded-xl backdrop-blur-[1px]">
-                            Cambiar logo
+                            Cambiar
                           </div>
                         )}
                       </div>
@@ -996,12 +1068,12 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                         onClick={() => logoFileInputRef.current?.click()}
                         className="w-28 sm:w-36 shrink-0 rounded-xl border-2 border-dashed border-amber-500/40 hover:border-amber-500 bg-amber-500/5 hover:bg-amber-500/10 flex flex-col items-center justify-center p-2 text-center transition-all cursor-pointer group"
                       >
-                        <ImagePlus size={22} className="text-amber-500 mb-1 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 leading-tight">
-                          + Subir Logo
+                        <QrCode size={22} className="text-amber-500 mb-1 group-hover:scale-110 transition-transform" />
+                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 leading-tight mb-0.5">
+                          Escanea Y Paga
                         </span>
-                        <span className="text-[8px] opacity-60 leading-tight mt-0.5">
-                          Empresa Cobradora
+                        <span className="text-[8px] opacity-70 leading-tight">
+                          + Subir QR o Logo
                         </span>
                       </button>
                     ) : null}
@@ -1014,18 +1086,20 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
               </div>
             )}
 
-            {/* Si no hay método de pago activo pero hay logo subido */}
+            {/* Si no hay método de pago activo pero hay QR / logo subido */}
             {paymentMethod === 'none' && companyLogo && (
               <div className="pt-2 border-t border-slate-700/20 dark:border-slate-700/60 flex items-center justify-between px-2">
                 <div className="text-xs">
-                  <span className="text-[9px] uppercase font-bold opacity-60 block">Cobro emitido por</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{companyName.trim() || 'Empresa Cobradora'}</span>
+                  <span className="text-[9px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                    Escanea Y Paga
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{companyName.trim() || 'Cobro Inmediato'}</span>
                 </div>
-                <div className="h-14 w-28 flex items-center justify-end">
+                <div className="h-16 w-28 flex items-center justify-end">
                   <img
                     src={companyLogo}
-                    alt="Logo Empresa"
-                    className="max-h-14 max-w-full object-contain"
+                    alt="QR / Logo"
+                    className="max-h-16 max-w-full object-contain"
                     referrerPolicy="no-referrer"
                   />
                 </div>
@@ -1386,22 +1460,22 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
               </div>
             )}
 
-            {/* Configuración del Logo y Empresa Cobradora */}
+            {/* Configuración del QR de Pago Inmediato o Logo */}
             <div 
               style={{ backgroundColor: colors.surfaceColor, borderColor: colors.borderColor }}
               className="p-3 rounded-lg border space-y-2.5"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ color: colors.textColor }}>
-                  <Building2 size={14} className="text-emerald-500" />
-                  Logo de Empresa Cobradora:
+                <span className="text-xs font-bold tracking-wider flex items-center gap-1.5" style={{ color: colors.textColor }}>
+                  <QrCode size={15} className="text-emerald-500" />
+                  Coloca tu QR para pago inmediato O coloca el logo de tu empresa:
                 </span>
                 {companyLogo ? (
-                  <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
+                  <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1 shrink-0 ml-2">
                     <Check size={12} /> Implantado en planilla
                   </span>
                 ) : (
-                  <span style={{ color: colors.mutedTextColor }} className="text-[10px]">
+                  <span style={{ color: colors.mutedTextColor }} className="text-[10px] shrink-0 ml-2">
                     Opcional
                   </span>
                 )}
@@ -1414,7 +1488,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                     <div className="w-16 h-16 rounded-xl bg-white dark:bg-slate-900 border border-slate-700/30 p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
                       <img 
                         src={companyLogo} 
-                        alt="Logo Empresa" 
+                        alt="QR o Logo" 
                         className="max-h-full max-w-full object-contain"
                         referrerPolicy="no-referrer"
                       />
@@ -1426,7 +1500,7 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                         className="px-2.5 py-1.5 rounded-lg border border-emerald-500/40 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
                       >
                         <Upload size={13} />
-                        Cambiar Logo
+                        Cambiar QR / Logo
                       </button>
                       <button
                         type="button"
@@ -1444,8 +1518,8 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
                     onClick={() => logoFileInputRef.current?.click()}
                     className="w-full py-2.5 px-3 rounded-xl border-2 border-dashed border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/5 hover:bg-emerald-500/10 text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
                   >
-                    <ImagePlus size={16} />
-                    <span>Subir Logo desde tu Teléfono (Galería o Cámara)</span>
+                    <QrCode size={16} />
+                    <span>Subir QR de Pago o Logo desde tu Teléfono</span>
                   </button>
                 )}
 
