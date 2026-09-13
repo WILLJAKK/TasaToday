@@ -13,21 +13,20 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className = '', showLa
   const [tooltip, setTooltip] = useState<string | null>(null);
 
   const handleClick = async () => {
-    await cycleTheme();
-    // Determinamos el siguiente estado para dar feedback inmediato
+    const next = await cycleTheme();
     let nextMsg = '';
-    if (themePreference === 'light') {
-      nextMsg = 'Modo Oscuro';
-    } else if (themePreference === 'dark') {
-      const isNight = new Date().getHours() >= 18 || new Date().getHours() < 6;
-      nextMsg = `Modo Auto (${isNight ? 'Noche: Oscuro' : 'Día: Claro'})`;
+    if (next === 'dark') {
+      nextMsg = '🌙 Modo Noche';
+    } else if (next === 'light') {
+      nextMsg = '☀️ Modo Día';
     } else {
-      nextMsg = 'Modo Claro';
+      const isNight = new Date().getHours() >= 18 || new Date().getHours() < 6;
+      nextMsg = `⏰ Modo Automático (${isNight ? 'Noche activa' : 'Día activo'})`;
     }
     setTooltip(nextMsg);
     setTimeout(() => {
       setTooltip(null);
-    }, 2000);
+    }, 2200);
   };
 
   const renderIcon = () => {
@@ -81,8 +80,8 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className = '', showLa
   };
 
   const getLabelText = () => {
-    if (themePreference === 'light') return 'Claro';
-    if (themePreference === 'dark') return 'Oscuro';
+    if (themePreference === 'dark') return 'Noche';
+    if (themePreference === 'light') return 'Día';
     return 'Automático';
   };
 
@@ -96,8 +95,8 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className = '', showLa
           borderColor: colors.borderColor,
         }}
         className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors cursor-pointer select-none active:scale-95 ${className}`}
-        title={`Tema: ${getLabelText()} (Presiona para cambiar: Claro → Oscuro → Auto)`}
-        aria-label="Cambiar tema de la aplicación"
+        title={`Tema actual: ${getLabelText()} (Toca para alternar: Noche → Día → Automático)`}
+        aria-label="Cambiar tema: Noche, Día o Automático"
       >
         <AnimatePresence mode="wait" initial={false}>
           {renderIcon()}
@@ -121,7 +120,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className = '', showLa
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.9 }}
             transition={{ duration: 0.18 }}
-            className="absolute top-10 left-1/2 -translate-x-1/2 whitespace-nowrap px-2.5 py-1 rounded bg-slate-900 text-white text-[11px] font-medium shadow-lg z-50 pointer-events-none border border-slate-700 font-sans"
+            className="absolute top-10 left-0 whitespace-nowrap px-2.5 py-1 rounded-md bg-slate-900 text-white text-[11px] font-semibold shadow-xl z-50 pointer-events-none border border-slate-700 font-sans"
           >
             {tooltip}
           </motion.div>

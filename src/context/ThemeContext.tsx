@@ -119,7 +119,7 @@ interface ThemeContextType {
   isDark: boolean;
   setThemePreference: (pref: ThemePreference) => Promise<void>;
   setThemeMode: (pref: ThemePreference) => Promise<void>;
-  cycleTheme: () => Promise<void>;
+  cycleTheme: () => Promise<ThemePreference>;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -218,17 +218,18 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // 3. Ciclar entre los tres modos al presionar el botón: Light -> Dark -> Auto -> Light
-  const cycleTheme = useCallback(async () => {
-    let nextTheme: ThemePreference = 'light';
-    if (themePreference === 'light') {
-      nextTheme = 'dark';
-    } else if (themePreference === 'dark') {
+  // 3. Ciclar entre los tres modos al presionar el botón: Noche -> Día -> Automático -> Noche
+  const cycleTheme = useCallback(async (): Promise<ThemePreference> => {
+    let nextTheme: ThemePreference = 'dark';
+    if (themePreference === 'dark') {
+      nextTheme = 'light';
+    } else if (themePreference === 'light') {
       nextTheme = 'auto';
     } else {
-      nextTheme = 'light';
+      nextTheme = 'dark';
     }
     await setThemePreference(nextTheme);
+    return nextTheme;
   }, [themePreference, setThemePreference]);
 
   const value = useMemo(

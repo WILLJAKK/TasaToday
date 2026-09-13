@@ -3,12 +3,12 @@ import { ExchangeRatesData, PaymentOption, PagoMovilData, ZelleData, UsdtData } 
 import { AdModal } from './AdModal';
 import { LegalModal } from './LegalModal';
 import { 
-  Star, ShieldCheck, Play, Sliders, Check, RotateCcw, Moon, Sun, Clock, 
+  Star, ShieldCheck, Play, Sliders, Check, RotateCcw, 
   AlertCircle, FileText, ChevronRight, Smartphone, DollarSign, Coins, Ban, Landmark,
   Building2, ImagePlus, Upload, Trash2
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
-import { useTheme, ThemeMode } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   PREMIUM_PRODUCT_ID,
   PREMIUM_PRODUCT_PRICE,
@@ -38,7 +38,7 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
   setAdBlockExpiresAt,
   onRefreshLiveRates,
 }) => {
-  const { themeMode, setThemeMode, activeTheme, colors, isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
   const [showEditRates, setShowEditRates] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -466,104 +466,12 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
 
   const isAdBlocked = isPremium || (adBlockExpiresAt !== null && adBlockExpiresAt > Date.now());
 
-  const themeOptions: { mode: ThemeMode; label: string; icon: React.FC<{ size?: number; className?: string }>; desc: string }[] = [
-    {
-      mode: 'light',
-      label: 'Claro',
-      icon: Sun,
-      desc: 'Fondo claro permanente',
-    },
-    {
-      mode: 'dark',
-      label: 'Oscuro',
-      icon: Moon,
-      desc: 'Fondo oscuro permanente',
-    },
-    {
-      mode: 'auto',
-      label: 'Automático',
-      icon: Clock,
-      desc: 'Oscuro (18:00 - 05:59) / Claro (06:00 - 17:59)',
-    },
-  ];
-
   return (
     <div 
       style={{ backgroundColor: colors.backgroundColor }}
       className="flex-1 overflow-y-auto p-4 flex flex-col justify-between transition-colors duration-200"
     >
-      <div className="max-w-lg mx-auto w-full space-y-4">
-
-        {/* SELECTOR DE TEMA / APARIENCIA */}
-        <div 
-          id="card-settings-theme"
-          style={{ 
-            backgroundColor: colors.surfaceColor, 
-            borderColor: colors.borderColor 
-          }}
-          className="p-5 rounded-xs border shadow-xs transition-colors duration-200"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <h2 
-              style={{ color: colors.textColor }}
-              className="text-[18px] font-bold leading-tight"
-            >
-              Apariencia y Tema
-            </h2>
-            <span 
-              style={{ 
-                backgroundColor: isDark ? 'rgba(56, 189, 248, 0.15)' : '#E0F2FE',
-                color: isDark ? '#38BDF8' : '#0369A1'
-              }}
-              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-            >
-              Activo: {activeTheme === 'dark' ? 'Modo Oscuro' : 'Modo Claro'}
-            </span>
-          </div>
-
-          <p style={{ color: colors.secondaryTextColor }} className="text-xs mb-4">
-            Selecciona el estilo visual. Los colores de las monedas (USDT, BCV, Euro, BTC) se mantienen intactos.
-          </p>
-
-          <div className="grid grid-cols-3 gap-2">
-            {themeOptions.map((opt) => {
-              const isSelected = themeMode === opt.mode;
-              const IconComp = opt.icon;
-              return (
-                <button
-                  key={opt.mode}
-                  id={`btn-theme-${opt.mode}`}
-                  onClick={() => setThemeMode(opt.mode)}
-                  style={{
-                    backgroundColor: isSelected 
-                      ? colors.usdtColor 
-                      : (isDark ? '#334155' : '#F1F5F9'),
-                    borderColor: isSelected ? colors.usdtColor : colors.borderColor,
-                    color: isSelected ? '#FFFFFF' : colors.textColor,
-                  }}
-                  className="flex flex-col items-center justify-center p-3 rounded-md border text-center transition-all cursor-pointer hover:opacity-95 active:scale-98 shadow-2xs"
-                >
-                  <IconComp size={20} className="mb-1.5 shrink-0" />
-                  <span className="text-xs font-bold leading-tight">{opt.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {themeMode === 'auto' && (
-            <div 
-              style={{ 
-                backgroundColor: isDark ? 'rgba(44, 153, 69, 0.15)' : '#F0FDF4',
-                borderColor: isDark ? 'rgba(44, 153, 69, 0.3)' : '#DCFCE7',
-                color: isDark ? '#4ADE80' : '#15803D' 
-              }}
-              className="mt-3 p-2.5 rounded border text-[11px] font-medium flex items-center gap-2"
-            >
-              <Clock size={15} className="shrink-0" />
-              <span>Regla horaria activa: Modo Oscuro entre 6:00 PM (18:00) y 5:59 AM. Modo Claro entre 6:00 AM y 5:59 PM.</span>
-            </div>
-          )}
-        </div>
+      <div className="max-w-lg mx-auto w-full space-y-4 pb-8">
 
         {/* Main Settings Card (Monetization / Premium) */}
         <div 
