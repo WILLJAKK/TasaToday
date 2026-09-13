@@ -136,12 +136,17 @@ export async function handler(event: {
 
   // GET /api/push/vapid-public-key
   if (urlPath.includes('vapid-public-key')) {
-    const vapidKeys = await getVapidKeys();
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({ publicKey: vapidKeys.publicKey }),
-    };
+    try {
+      const vapidKeys = await getVapidKeys();
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ publicKey: vapidKeys.publicKey }),
+      };
+    } catch (err: any) {
+      console.warn('[PUSH VAPID KEY ERROR]:', err?.message);
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
   }
 
   // POST /api/push/subscribe
@@ -269,17 +274,22 @@ export async function handler(event: {
 
   // GET /api/push/status
   if (urlPath.includes('status')) {
-    const subs = await db.select().from(pushSubscriptions);
-    const nativeTokens = await db.select().from(nativePushTokens);
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        configured: true,
-        subscribersCount: subs.length,
-        nativeTokensCount: nativeTokens.length,
-      }),
-    };
+    try {
+      const subs = await db.select().from(pushSubscriptions);
+      const nativeTokens = await db.select().from(nativePushTokens);
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          configured: true,
+          subscribersCount: subs.length,
+          nativeTokensCount: nativeTokens.length,
+        }),
+      };
+    } catch (err: any) {
+      console.warn('[PUSH STATUS ERROR]:', err?.message);
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
   }
 
   return { statusCode: 404, headers, body: JSON.stringify({ error: 'Ruta no encontrada' }) };

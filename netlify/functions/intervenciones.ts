@@ -73,6 +73,27 @@ async function checkAndBroadcastNewIntervencion(latestItem: IntervencionItem) {
   }).catch((err) => console.warn('[PUSH ERROR]:', err));
 }
 
+// Recupera la última intervención persistida (Blobs o archivo local) cuando el scraping falla
+// y no hay caché en memoria disponible, evitando devolver un error al cliente.
+async function getLastKnownIntervencion(): Promise<IntervencionItem | null> {
+  const store = getIntervencionStore();
+
+  if (store) {
+    const saved = await store.get(LAST_INTERVENCION_KEY, { type: 'json' }).catch(() => null);
+    const item = (saved as { item?: IntervencionItem } | null)?.item;
+    return item || null;
+  }
+
+  try {
+    if (fs.existsSync(LAST_INTERVENCION_FILE)) {
+      const saved = JSON.parse(fs.readFileSync(LAST_INTERVENCION_FILE, 'utf8'));
+      return saved?.item || null;
+    }
+  } catch {}
+
+  return null;
+}
+
 interface NetlifyEvent {
   httpMethod: string;
   headers: Record<string, string>;
@@ -233,7 +254,7 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
       body: JSON.stringify(data),
     };
   } catch (error: any) {
-    // Si falla el scraping pero tenemos caché anterior, entregarla con código 200
+    // Si falla el scraping pero tenemos caché en memoria, entregarla con código 200
     if (cachedIntervenciones && cachedIntervenciones.length > 0) {
       return {
         statusCode: 200,
@@ -245,6 +266,24 @@ export const handler = async (event: NetlifyEvent): Promise<NetlifyResponse> => 
         body: JSON.stringify(cachedIntervenciones),
       };
     }
+
+    // Sin caché en memoria (p.ej. cold start): recurrir al último dato persistido
+    const lastKnown = await getLastKnownIntervencion();
+    if (lastKnown) {
+      cachedIntervenciones = [lastKnown];
+      lastCacheTime = now;
+      return {
+        statusCode: 200,
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=60',
+        },
+        body: JSON.stringify(cachedIntervenciones),
+      };
+    }
+
+    console.warn('[INTERVENCIONES ERROR]:', error?.message || error);
 
     return {
       statusCode: 500,
