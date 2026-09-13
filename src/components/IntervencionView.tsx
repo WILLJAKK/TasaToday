@@ -11,6 +11,7 @@ import {
   subscribeToBCVIntervencionPush,
   unsubscribeFromBCVIntervencionPush,
   getExistingPushSubscription,
+  triggerTestPushNotification,
 } from '../services/pushNotificationService';
 
 interface IntervencionViewProps {
@@ -123,7 +124,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
 
     if (result.success) {
       setPushEnabled(true);
-      showToast('¡Notificaciones Push de Primer Plano activadas! Recibirás la alerta aun con pantalla bloqueada.');
+      showToast('¡Notificaciones Push activadas! Se ha enviado una alerta de prueba a tu teléfono.');
     } else {
       showToast(result.error || 'No se pudo activar las notificaciones.');
     }
@@ -239,13 +240,13 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
               </div>
             </div>
 
-            {/* Solo el botón de notificaciones push */}
-            <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
+            {/* Botones de control de notificaciones push */}
+            <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2">
               <button
                 id="btn-enable-push"
                 onClick={handleTogglePush}
                 disabled={isSubscribing}
-                className={`w-full sm:w-auto text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50 ${
+                className={`text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50 ${
                   pushEnabled
                     ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100'
                     : 'bg-[#2C9945] hover:bg-[#25823a] text-white'
@@ -262,9 +263,30 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
               </button>
 
               {pushEnabled && (
-                <div className="hidden sm:flex items-center gap-1.5 text-[#2C9945] text-xs font-bold">
-                  <CheckCircle2 size={16} />
-                  <span>Activas</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    id="btn-test-push-now"
+                    type="button"
+                    onClick={async () => {
+                      setIsSubscribing(true);
+                      const res = await triggerTestPushNotification(0);
+                      setIsSubscribing(false);
+                      if (res.success) {
+                        showToast('🔔 ¡Notificación de prueba enviada a tu teléfono!');
+                      } else {
+                        showToast(res.error || 'Error al enviar prueba');
+                      }
+                    }}
+                    disabled={isSubscribing}
+                    className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
+                  >
+                    <Zap size={14} />
+                    <span>Probar Notificación Ahora</span>
+                  </button>
+                  <div className="hidden sm:flex items-center gap-1.5 text-[#2C9945] text-xs font-bold">
+                    <CheckCircle2 size={16} />
+                    <span>Activas</span>
+                  </div>
                 </div>
               )}
             </div>

@@ -867,8 +867,8 @@ app.post('/api/push/test', (req, res) => {
 
   const doSend = async () => {
     await broadcastPushNotification({
-      title: '🚨 PRUEBA: NUEVA INTERVENCIÓN BCV',
-      body: `Intervención N° ${sample.nro} (${sample.fecha}): Bs. ${sample.tipoCambioBsUsd} / USD | Bs. ${sample.tipoCambioBsEur} / EUR. Notificación de primer plano entregada.`,
+      title: '🚨 NUEVA INTERVENCIÓN BCV',
+      body: `Se te avisará con una notificación al teléfono en el momento que se publique una intervención en el Banco Central de Venezuela (www.bcv.org.ve). Referencia: N° ${sample.nro} (Bs. ${sample.tipoCambioBsUsd} / USD).`,
       tag: 'prueba-intervencion-' + Date.now(),
       url: '/?tab=intervencion',
       fecha: sample.fecha,

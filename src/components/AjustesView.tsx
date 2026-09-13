@@ -15,6 +15,7 @@ import {
   getExistingPushSubscription,
   subscribeToBCVIntervencionPush,
   unsubscribeFromBCVIntervencionPush,
+  triggerTestPushNotification,
 } from '../services/pushNotificationService';
 import {
   PREMIUM_PRODUCT_ID,
@@ -110,11 +111,11 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
 
     if (result.success) {
       setPushEnabled(true);
-      setPushToast('¡Notificaciones Push activadas!');
-      setTimeout(() => setPushToast(null), 4000);
+      setPushToast('¡Notificaciones Push activadas! Se ha enviado una alerta de prueba a tu teléfono.');
+      setTimeout(() => setPushToast(null), 5000);
     } else {
       setPushToast(result.error || 'No se pudo activar las notificaciones.');
-      setTimeout(() => setPushToast(null), 4000);
+      setTimeout(() => setPushToast(null), 5000);
     }
   };
 
@@ -665,14 +666,14 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
             </div>
           )}
 
-          {/* Solo el botón de notificaciones push */}
-          <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-2">
+          {/* Botones de control de notificaciones push */}
+          <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-wrap items-center justify-between gap-2">
             <button
               id="btn-settings-enable-push"
               type="button"
               onClick={handleTogglePush}
               disabled={isSubscribingPush}
-              className={`w-full sm:w-auto text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50 ${
+              className={`text-xs font-bold px-4 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50 ${
                 pushEnabled
                   ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100'
                   : 'bg-[#2C9945] hover:bg-[#25823a] text-white'
@@ -689,9 +690,32 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
             </button>
 
             {pushEnabled && (
-              <div className="hidden sm:flex items-center gap-1.5 text-[#2C9945] text-xs font-bold">
-                <Check size={16} />
-                <span>Activas</span>
+              <div className="flex items-center gap-2">
+                <button
+                  id="btn-settings-test-push"
+                  type="button"
+                  onClick={async () => {
+                    setIsSubscribingPush(true);
+                    const res = await triggerTestPushNotification(0);
+                    setIsSubscribingPush(false);
+                    if (res.success) {
+                      setPushToast('🔔 ¡Notificación de prueba enviada a tu teléfono!');
+                      setTimeout(() => setPushToast(null), 5000);
+                    } else {
+                      setPushToast(res.error || 'Error al enviar prueba');
+                      setTimeout(() => setPushToast(null), 5000);
+                    }
+                  }}
+                  disabled={isSubscribingPush}
+                  className="bg-amber-500 hover:bg-amber-600 text-black text-xs font-bold px-3 py-2 rounded-lg transition-all flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  <Zap size={14} />
+                  <span>Probar Notificación Ahora</span>
+                </button>
+                <div className="hidden sm:flex items-center gap-1.5 text-[#2C9945] text-xs font-bold">
+                  <Check size={16} />
+                  <span>Activas</span>
+                </div>
               </div>
             )}
           </div>

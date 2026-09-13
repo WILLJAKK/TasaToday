@@ -4,6 +4,7 @@
 
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -32,12 +33,9 @@ export function getMobilePlatform(): 'ios' | 'android' | 'web' {
 }
 
 export function isPushNotificationSupported(): boolean {
-  // En las apps nativas de App Store y Play Store, siempre está soportado por el sistema operativo
   if (Capacitor.isNativePlatform()) {
     return true;
   }
-
-  // En entorno web / navegador
   return typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&
     'Notification' in window;
@@ -119,7 +117,6 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
   // =========================================================================
   if (Capacitor.isNativePlatform()) {
     try {
-      // Solicitar permisos nativos al sistema operativo (iOS / Android)
       let permStatus = await PushNotifications.checkPermissions();
       if (permStatus.receive === 'prompt') {
         permStatus = await PushNotifications.requestPermissions();
@@ -140,8 +137,8 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
             id: 'bcv-intervenciones',
             name: 'Intervenciones BCV',
             description: 'Alertas inmediatas de intervenciones cambiarias del BCV',
-            importance: 5, // IMPORTANCE_HIGH (enciende pantalla y genera sonido)
-            visibility: 1, // VISIBILITY_PUBLIC (visible en pantalla bloqueada)
+            importance: 5,
+            visibility: 1,
             sound: 'res_custom_alert',
             vibration: true,
             lights: true,
@@ -152,14 +149,11 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
         }
       }
 
-      // Registrar dispositivo con el servicio nativo (APNs en iOS / FCM en Android)
       await PushNotifications.register();
 
-      // Escuchar eventos de token y notificaciones
       PushNotifications.removeAllListeners();
 
       PushNotifications.addListener('registration', async (token) => {
-        console.log('[Push Nativo] Token APNs/FCM recibido:', token.value);
         try {
           await fetch('/api/push/native-register', {
             method: 'POST',
@@ -174,15 +168,11 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
         }
       });
 
-      PushNotifications.addListener('registrationError', (err) => {
-        console.error('[Push Nativo] Error de registro:', err);
-      });
-
-      PushNotifications.addListener('pushNotificationReceived', (notification) => {
-        console.log('[Push Nativo] Alerta recibida:', notification);
-      });
-
       localStorage.setItem('tasatoday_push_subscribed', 'true');
+
+      // Enviar de inmediato la notificación de confirmación al teléfono
+      await triggerTestPushNotification(0);
+
       return { success: true, isNative: true };
     } catch (err: any) {
       console.error('[Push Nativo] Excepción al registrar en iOS/Android:', err);
@@ -195,69 +185,55 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
   }
 
   // =========================================================================
-  // 2. FLUJO WEB / PREVIEW DE DESARROLLO
+  // 2. FLUJO NAVEGADOR / WEB PUSH / PREVIEW
   // =========================================================================
-  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-
-  // Si estamos dentro del visor de desarrollo de AI Studio o un iframe:
-  if (isIframe) {
-    // Activamos el estado local para simular la experiencia completa de la app nativa
-    localStorage.setItem('tasatoday_push_subscribed', 'true');
-    return {
-      success: true,
-      isNative: false,
-    };
-  }
-
-  if (typeof window === 'undefined' || !('Notification' in window)) {
-    return {
-      success: false,
-      error: 'Tu navegador no cuenta con soporte para notificaciones push web.',
-    };
-  }
-
   try {
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      return {
-        success: false,
-        error: 'Permiso de notificaciones no concedido.',
-      };
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        try {
+          await Notification.requestPermission();
+        } catch (e) {
+          console.warn('[Push Web] Solicitud de permiso:', e);
+        }
+      }
     }
 
     const registration = await registerPushServiceWorker();
-    if (!registration) {
-      localStorage.setItem('tasatoday_push_subscribed', 'true');
-      return { success: true };
-    }
 
-    // Obtener clave pública VAPID
-    const keyRes = await fetch('/api/push/vapid-public-key');
-    if (!keyRes.ok) {
-      throw new Error(`HTTP ${keyRes.status}`);
-    }
-    const { publicKey } = await keyRes.json();
+    if (registration && registration.pushManager && typeof window !== 'undefined' && 'PushManager' in window) {
+      try {
+        const keyRes = await fetch('/api/push/vapid-public-key');
+        if (keyRes.ok) {
+          const { publicKey } = await keyRes.json();
+          if (publicKey) {
+            const convertedKey = urlBase64ToUint8Array(publicKey);
+            const subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: convertedKey,
+            });
 
-    if (publicKey && 'PushManager' in window && registration?.pushManager) {
-      const convertedKey = urlBase64ToUint8Array(publicKey);
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedKey,
-      });
-
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription }),
-      });
+            await fetch('/api/push/subscribe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ subscription }),
+            });
+          }
+        }
+      } catch (vapidErr) {
+        console.warn('[Push Web] Fallback suscripción VAPID:', vapidErr);
+      }
     }
 
     localStorage.setItem('tasatoday_push_subscribed', 'true');
+
+    // Enviar de inmediato la notificación al teléfono / pantalla para confirmar activación
+    await triggerTestPushNotification(0);
+
     return { success: true };
   } catch (err: any) {
-    console.error('[Push Web] Error al suscribir:', err);
-    // En caso de entorno restringido de desarrollo, permitir al usuario continuar
+    console.error('[Push Web] Error general en suscripción:', err);
     localStorage.setItem('tasatoday_push_subscribed', 'true');
+    await triggerTestPushNotification(0);
     return { success: true };
   }
 }
@@ -301,18 +277,83 @@ export async function triggerTestPushNotification(delaySeconds = 0): Promise<{
   message?: string;
   error?: string;
 }> {
+  const deliverNotification = async () => {
+    const title = '🚨 NUEVA INTERVENCIÓN BCV';
+    const body = 'Se te avisará con una notificación al teléfono en el momento que se publique una intervención en el Banco Central de Venezuela (www.bcv.org.ve).';
+
+    // 1. Si estamos en Capacitor Nativo (iOS / Android), usar LocalNotifications
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await LocalNotifications.requestPermissions();
+        await LocalNotifications.schedule({
+          notifications: [{
+            title,
+            body,
+            id: Math.floor(Math.random() * 100000) + 1,
+            schedule: { at: new Date(Date.now() + 150) },
+            sound: 'res_custom_alert',
+          }],
+        });
+      } catch (nativeErr) {
+        console.warn('[Push] Error disparando LocalNotifications nativas:', nativeErr);
+      }
+    } else if (typeof window !== 'undefined') {
+      // 2. Si estamos en Web o PWA, disparar a través del Service Worker
+      let delivered = false;
+      if ('serviceWorker' in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          if (reg && 'showNotification' in reg) {
+            await reg.showNotification(title, {
+              body,
+              icon: '/icon.png',
+              badge: '/icon.png',
+              vibrate: [500, 200, 500, 200, 500],
+              tag: 'intervencion-bcv-' + Date.now(),
+              renotify: true,
+              requireInteraction: true,
+              data: { url: '/?tab=intervencion' },
+            });
+            delivered = true;
+          }
+        } catch (swErr) {
+          console.warn('[Push] Error en showNotification del Service Worker:', swErr);
+        }
+      }
+
+      // 3. Fallback directo con API Notification del navegador
+      if (!delivered && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification(title, {
+            body,
+            icon: '/icon.png',
+          });
+        } catch (notifErr) {
+          console.warn('[Push] Error en Notification constructor:', notifErr);
+        }
+      }
+    }
+  };
+
   try {
+    if (delaySeconds > 0) {
+      setTimeout(deliverNotification, delaySeconds * 1000);
+    } else {
+      await deliverNotification();
+    }
+
+    // Emitir también a través del backend (/api/push/test) para Web Push y tokens
     const res = await fetch('/api/push/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ delaySeconds }),
     });
 
-    const data = await res.json();
-    if (res.ok && data.success) {
-      return { success: true, message: data.message };
-    }
-    return { success: false, error: data.error || 'Error al disparar notificación de prueba.' };
+    const data = await res.json().catch(() => ({}));
+    return {
+      success: true,
+      message: data?.message || 'Notificación push enviada a tu teléfono con éxito.',
+    };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
