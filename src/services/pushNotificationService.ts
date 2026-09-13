@@ -5,6 +5,7 @@
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { apiUrl } from '../utils/apiConfig';
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -155,7 +156,7 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
 
       PushNotifications.addListener('registration', async (token) => {
         try {
-          await fetch('/api/push/native-register', {
+          await fetch(apiUrl('/api/push/native-register'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -202,7 +203,7 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
 
     if (registration && registration.pushManager && typeof window !== 'undefined' && 'PushManager' in window) {
       try {
-        const keyRes = await fetch('/api/push/vapid-public-key');
+        const keyRes = await fetch(apiUrl('/api/push/vapid-public-key'));
         if (keyRes.ok) {
           const { publicKey } = await keyRes.json();
           if (publicKey) {
@@ -212,7 +213,7 @@ export async function subscribeToBCVIntervencionPush(): Promise<{
               applicationServerKey: convertedKey,
             });
 
-            await fetch('/api/push/subscribe', {
+            await fetch(apiUrl('/api/push/subscribe'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ subscription }),
@@ -251,7 +252,7 @@ export async function unsubscribeFromBCVIntervencionPush(): Promise<boolean> {
         if (registration && registration.pushManager) {
           const subscription = await registration.pushManager.getSubscription();
           if (subscription) {
-            await fetch('/api/push/unsubscribe', {
+            await fetch(apiUrl('/api/push/unsubscribe'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ endpoint: subscription.endpoint }),
@@ -347,7 +348,7 @@ export async function triggerTestPushNotification(
     }
 
     // Emitir también a través del backend (/api/push/test) para Web Push y tokens
-    const res = await fetch('/api/push/test', {
+    const res = await fetch(apiUrl('/api/push/test'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ delaySeconds }),

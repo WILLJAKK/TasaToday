@@ -5,6 +5,7 @@ import {
   Search, ShieldCheck, Zap, Smartphone, AlertTriangle, Lock, Info, HelpCircle
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { apiUrl } from '../utils/apiConfig';
 import {
   isPushNotificationSupported,
   getNotificationPermission,
@@ -66,7 +67,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
   const fetchIntervenciones = useCallback(async (isManual = false) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/intervenciones', { cache: 'no-store' });
+      const res = await fetch(apiUrl('/api/intervenciones'), { cache: 'no-store' });
       if (!res.ok) {
         throw new Error(`Error en servidor: HTTP ${res.status}`);
       }

@@ -10,6 +10,7 @@ import { BottomTabBar } from './components/BottomTabBar';
 import { useTheme } from './context/ThemeContext';
 import { WifiOff } from 'lucide-react';
 import { getStoredPremiumStatus, getStoredAdsBlockedUntil } from './services/iapService';
+import { apiUrl } from './utils/apiConfig';
 
 const defaultMissingItem: RateItem = {
   price: null,
@@ -154,7 +155,7 @@ export default function App() {
       setLoading(true);
     }
     try {
-      const res = await fetch(`/api/rates?t=${Date.now()}`, { 
+      const res = await fetch(apiUrl(`/api/rates?t=${Date.now()}`), { 
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache',
