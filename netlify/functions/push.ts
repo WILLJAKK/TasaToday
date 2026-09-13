@@ -135,7 +135,29 @@ export async function handler(event: {
         subs.push({ ...subscription, createdAt: new Date().toISOString() });
         saveSubscriptions(subs);
       }
-      return { statusCode: 200, headers, body: JSON.stringify({ success: true, count: subs.length }) };
+
+      // Disparar push de confirmación real del sistema de vuelta al dispositivo
+      try {
+        const confirmationPayload = JSON.stringify({
+          title: '¡Alertas Activadas!',
+          body: 'Recibirás las notificaciones de TasaToday aquí.',
+          icon: '/icon.png',
+          badge: '/icon.png',
+          tag: 'tasatoday-welcome-' + Date.now(),
+          url: '/?tab=intervencion',
+          timestamp: Date.now(),
+        });
+
+        await webpush.sendNotification(subscription, confirmationPayload, {
+          TTL: 86400,
+          urgency: 'high',
+          topic: 'tasatoday-confirm',
+        });
+      } catch (pushErr: any) {
+        console.warn('[PUSH Serverless] Nota al enviar confirmación inmediata:', pushErr?.message);
+      }
+
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true, count: subs.length, pushSent: true }) };
     } catch (err: any) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }

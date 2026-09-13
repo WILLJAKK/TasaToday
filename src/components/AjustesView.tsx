@@ -652,7 +652,7 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
             </div>
             <div className="flex-1 space-y-1">
               <h3 style={{ color: colors.textColor }} className="font-bold text-sm leading-snug">
-                Notificaciones Push
+                Notificaciones de Nuevas Intervenciones BCV
               </h3>
               <p style={{ color: colors.secondaryTextColor }} className="text-xs leading-relaxed">
                 Se te avisará con una notificación al teléfono en el momento que se publique una intervención en el Banco Central de Venezuela (www.bcv.org.ve).
@@ -684,8 +684,8 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
                 {isSubscribingPush
                   ? 'Procesando...'
                   : pushEnabled
-                  ? 'Desactivar Notificaciones Push'
-                  : 'Activar Notificaciones Push'}
+                  ? 'Desactivar Alertas de Primer Plano'
+                  : 'Activar Alertas de Primer Plano'}
               </span>
             </button>
 

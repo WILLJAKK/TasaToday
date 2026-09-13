@@ -272,14 +272,18 @@ export async function unsubscribeFromBCVIntervencionPush(): Promise<boolean> {
   }
 }
 
-export async function triggerTestPushNotification(delaySeconds = 0): Promise<{
+export async function triggerTestPushNotification(
+  delaySeconds = 0,
+  customTitle?: string,
+  customBody?: string
+): Promise<{
   success: boolean;
   message?: string;
   error?: string;
 }> {
   const deliverNotification = async () => {
-    const title = '🚨 NUEVA INTERVENCIÓN BCV';
-    const body = 'Se te avisará con una notificación al teléfono en el momento que se publique una intervención en el Banco Central de Venezuela (www.bcv.org.ve).';
+    const title = customTitle || '¡Alertas Activadas!';
+    const body = customBody || 'Recibirás las notificaciones de TasaToday aquí.';
 
     // 1. Si estamos en Capacitor Nativo (iOS / Android), usar LocalNotifications
     if (Capacitor.isNativePlatform()) {

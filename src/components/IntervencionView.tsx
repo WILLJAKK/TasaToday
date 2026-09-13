@@ -229,7 +229,7 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                   style={{ color: colors.textColor }}
                   className="font-bold text-sm leading-snug"
                 >
-                  Notificaciones Push
+                  Notificaciones de Nuevas Intervenciones BCV
                 </h3>
                 <p
                   style={{ color: colors.secondaryTextColor }}
@@ -257,8 +257,8 @@ export const IntervencionView: React.FC<IntervencionViewProps> = () => {
                   {isSubscribing
                     ? 'Procesando...'
                     : pushEnabled
-                    ? 'Desactivar Notificaciones Push'
-                    : 'Activar Notificaciones Push'}
+                    ? 'Desactivar Alertas de Primer Plano'
+                    : 'Activar Alertas de Primer Plano'}
                 </span>
               </button>
 

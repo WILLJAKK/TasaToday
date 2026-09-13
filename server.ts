@@ -835,7 +835,7 @@ app.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ publicKey: vapidKeys.publicKey });
 });
 
-app.post('/api/push/subscribe', (req, res) => {
+app.post('/api/push/subscribe', async (req, res) => {
   const { subscription } = req.body;
   if (!subscription || !subscription.endpoint || !subscription.keys) {
     res.status(400).json({ error: 'Objeto de suscripción inválido' });
@@ -849,7 +849,29 @@ app.post('/api/push/subscribe', (req, res) => {
     console.log(`[PUSH] Nuevo dispositivo registrado. Total activos: ${pushSubscriptions.length}`);
   }
 
-  res.json({ success: true, count: pushSubscriptions.length });
+  // Disparar push de confirmación real del sistema de vuelta al dispositivo que se acaba de registrar
+  try {
+    const confirmationPayload = JSON.stringify({
+      title: '¡Alertas Activadas!',
+      body: 'Recibirás las notificaciones de TasaToday aquí.',
+      icon: '/icon.png',
+      badge: '/icon.png',
+      tag: 'tasatoday-welcome-' + Date.now(),
+      url: '/?tab=intervencion',
+      timestamp: Date.now(),
+    });
+
+    await webpush.sendNotification(subscription, confirmationPayload, {
+      TTL: 86400,
+      urgency: 'high',
+      topic: 'tasatoday-confirm',
+    });
+    console.log('[PUSH] Notificación de confirmación enviada con éxito al nuevo suscriptor.');
+  } catch (pushErr: any) {
+    console.warn('[PUSH] Nota al enviar push de confirmación inmediata:', pushErr?.message);
+  }
+
+  res.json({ success: true, count: pushSubscriptions.length, pushSent: true });
 });
 
 app.post('/api/push/unsubscribe', (req, res) => {
