@@ -30,10 +30,11 @@ export interface ExchangeRatesData {
   euro: RateItem | null;
   btc: RateItem | null;
   oro: RateItem | null;
+  tasami?: RateItem | null;
   lastUpdated: string;
 }
 
-export type SelectedCurrency = 'usdt' | 'bcv' | 'euro' | 'btc' | 'oro';
+export type SelectedCurrency = 'usdt' | 'bcv' | 'euro' | 'btc' | 'oro' | 'tasami';
 export type GoldUnit = 'g' | 'oz' | 'kg';
 export const GRAMS_PER_TROY_OZ = 31.1034768; // 31.1034768 gramos por Onza Troy (Estándar Internacional LBMA)
 export const TROY_OZ_PER_KG = 1000 / 31.1034768; // 32.15074657461495 Troy Ounces por Kilogramo

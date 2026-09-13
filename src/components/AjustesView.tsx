@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import { useTheme } from '../context/ThemeContext';
+import { getStoredTasamiRate, saveTasamiRate, formatTasamiRate } from '../utils/tasami';
 import {
   PREMIUM_PRODUCT_ID,
   PREMIUM_PRODUCT_PRICE,
@@ -40,9 +41,21 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
 }) => {
   const { colors, isDark } = useTheme();
   const [isAdModalOpen, setIsAdModalOpen] = useState(false);
-  const [showEditRates, setShowEditRates] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
-  const [resetSuccessToast, setResetSuccessToast] = useState(false);
+
+  // Estado de TasaMi personalizada
+  const [tasamiRate, setTasamiRate] = useState<number>(() => getStoredTasamiRate());
+  const [tasamiInput, setTasamiInput] = useState<string>(() => getStoredTasamiRate().toString());
+  const [tasamiSavedToast, setTasamiSavedToast] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleTasamiChanged = (e: any) => {
+      const newRate = typeof e?.detail?.rate === 'number' ? e.detail.rate : getStoredTasamiRate();
+      setTasamiRate(newRate);
+      setTasamiInput(newRate.toString());
+    };
+    window.addEventListener('tasatoday_tasami_changed', handleTasamiChanged);
+    return () => window.removeEventListener('tasatoday_tasami_changed', handleTasamiChanged);
+  }, []);
 
   // Estados de compras en la tienda (IAP)
   const [isPurchasing, setIsPurchasing] = useState(false);
@@ -56,13 +69,6 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
   const [isLegalModalOpen, setIsLegalModalOpen] = useState(false);
   const [legalModalTab, setLegalModalTab] = useState<'eula' | 'privacy'>('eula');
   const [rateToast, setRateToast] = useState<string | null>(null);
-
-  // Temporary edit state con protección null
-  const [editBcv, setEditBcv] = useState(rates.bcv?.numPrice?.toString() || '0');
-  const [editUsdt, setEditUsdt] = useState(rates.usdt?.numPrice?.toString() || '0');
-  const [editEuro, setEditEuro] = useState(rates.euro?.numPrice?.toString() || '0');
-  const [editBtc, setEditBtc] = useState(rates.btc?.numPrice?.toString() || '0');
-  const [editOro, setEditOro] = useState(rates.oro?.numPrice?.toString() || '0');
 
   // Datos de Métodos de Pago guardados para cobros
   const [paymentMethod, setPaymentMethod] = useState<PaymentOption>(() => {
@@ -188,15 +194,6 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
       localStorage.removeItem('tasadolar_company_logo');
     } catch {}
   };
-
-  // Mantener sincronizados los campos cuando se abren o se actualizan las tasas en vivo
-  useEffect(() => {
-    if (rates.bcv?.numPrice) setEditBcv(rates.bcv.numPrice.toString());
-    if (rates.usdt?.numPrice) setEditUsdt(rates.usdt.numPrice.toString());
-    if (rates.euro?.numPrice) setEditEuro(rates.euro.numPrice.toString());
-    if (rates.btc?.numPrice) setEditBtc(rates.btc.numPrice.toString());
-    if (rates.oro?.numPrice) setEditOro(rates.oro.numPrice.toString());
-  }, [rates]);
 
   // Manejador nativo de suscripción Premium
   const handlePurchasePremium = async () => {
@@ -358,109 +355,14 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
     }
   };
 
-  const handleSaveRates = (e: React.FormEvent) => {
+  const handleSaveTasami = (e: React.FormEvent) => {
     e.preventDefault();
-    const newBcv = parseFloat(editBcv) || rates.bcv?.numPrice || 0;
-    const newUsdt = parseFloat(editUsdt) || rates.usdt?.numPrice || 0;
-    const newEuro = parseFloat(editEuro) || rates.euro?.numPrice || 0;
-    const newBtc = parseFloat(editBtc) || rates.btc?.numPrice || 0;
-    const newOro = parseFloat(editOro) || rates.oro?.numPrice || 0;
-
-    setRates({
-      bcv: {
-        price: newBcv.toFixed(2).replace('.', ','),
-        numPrice: newBcv,
-        change: rates.bcv?.change || '0,00',
-        percent: rates.bcv?.percent || '0.00',
-        isUp: rates.bcv?.isUp ?? true,
-        status: 'ok',
-      },
-      usdt: {
-        price: newUsdt.toFixed(2).replace('.', ','),
-        numPrice: newUsdt,
-        change: rates.usdt?.change || '0,00',
-        percent: rates.usdt?.percent || '0.00',
-        isUp: rates.usdt?.isUp ?? true,
-        status: 'ok',
-      },
-      euro: {
-        price: newEuro.toFixed(2).replace('.', ','),
-        numPrice: newEuro,
-        change: rates.euro?.change || '0,00',
-        percent: rates.euro?.percent || '0.00',
-        isUp: rates.euro?.isUp ?? true,
-        status: 'ok',
-      },
-      btc: {
-        price: newBtc.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-        numPrice: newBtc,
-        change: rates.btc?.change || '0.00',
-        percent: rates.btc?.percent || '0.00',
-        isUp: rates.btc?.isUp ?? true,
-        status: 'ok',
-      },
-      oro: {
-        price: newOro.toLocaleString('en-US', { minimumFractionDigits: 2 }),
-        numPrice: newOro,
-        change: rates.oro?.change || '0.00',
-        percent: rates.oro?.percent || '0.00',
-        isUp: rates.oro?.isUp ?? true,
-        status: 'ok',
-      },
-      lastUpdated: new Date().toLocaleDateString('es-VE', {
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    });
-    setShowEditRates(false);
-  };
-
-  // Restablece consultando las tasas REALES Y ACTUALIZADAS en el momento exacto
-  const handleResetRates = async () => {
-    setIsResetting(true);
-    try {
-      let freshData: any = null;
-      // Consultar endpoint central /api/rates
-      const serverRes = await fetch(`/api/rates?t=${Date.now()}`, { 
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-      });
-      if (serverRes.ok) {
-        const json = await serverRes.json();
-        if (json && json.bcv && json.usdt && json.euro) {
-          freshData = json;
-        }
-      }
-
-      if (freshData) {
-        setRates(freshData);
-
-        const bcvVal = freshData.bcv?.numPrice ? freshData.bcv.numPrice.toString() : '832.49';
-        const usdtVal = freshData.usdt?.numPrice ? freshData.usdt.numPrice.toString() : '940.95';
-        const euroVal = freshData.euro?.numPrice ? freshData.euro.numPrice.toString() : '968.07';
-        const btcVal = freshData.btc?.numPrice ? freshData.btc.numPrice.toString() : '77800';
-        const oroVal = freshData.oro?.numPrice ? freshData.oro.numPrice.toString() : '4364.20';
-
-        setEditBcv(bcvVal);
-        setEditUsdt(usdtVal);
-        setEditEuro(euroVal);
-        setEditBtc(btcVal);
-        setEditOro(oroVal);
-
-        if (onRefreshLiveRates) {
-          await onRefreshLiveRates();
-        }
-
-        setResetSuccessToast(true);
-        setTimeout(() => setResetSuccessToast(false), 3000);
-      }
-    } catch (err) {
-      console.error('Error al restablecer tasas en vivo:', err);
-    } finally {
-      setIsResetting(false);
+    const parsed = parseFloat(tasamiInput.replace(',', '.'));
+    if (!isNaN(parsed) && parsed > 0) {
+      saveTasamiRate(parsed);
+      setTasamiRate(parsed);
+      setTasamiSavedToast(true);
+      setTimeout(() => setTasamiSavedToast(false), 3500);
     }
   };
 
@@ -1061,143 +963,87 @@ export const AjustesView: React.FC<AjustesViewProps> = ({
           </form>
         </div>
 
-        {/* Custom Rates Adjustment Tool */}
+        {/* Ajuste manual de TasaMi */}
         <div 
+          id="card-settings-tasami"
           style={{ 
             backgroundColor: colors.surfaceColor, 
             borderColor: colors.borderColor 
           }}
           className="p-4 rounded-xs border shadow-xs transition-colors duration-200"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Sliders size={16} style={{ color: colors.usdtColor }} />
-              <h3 style={{ color: colors.textColor }} className="font-bold text-sm">Ajuste Manual de Tasas</h3>
+              <Sliders size={16} style={{ color: '#7C3AED' }} />
+              <h3 style={{ color: colors.textColor }} className="font-bold text-sm">
+                Ajuste manual de TasaMi
+              </h3>
             </div>
-            <button
-              onClick={() => setShowEditRates(!showEditRates)}
-              style={{ color: colors.usdtColor }}
-              className="text-xs font-semibold hover:underline cursor-pointer"
+            <span 
+              style={{ 
+                backgroundColor: isDark ? 'rgba(124, 58, 237, 0.2)' : '#EDE9FE',
+                color: '#7C3AED' 
+              }}
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full"
             >
-              {showEditRates ? 'Ocultar' : 'Editar Tasas'}
-            </button>
+              Tasa activa: Bs. {formatTasamiRate(tasamiRate)}
+            </span>
           </div>
 
-          {showEditRates && (
-            <form onSubmit={handleSaveRates} className="mt-4 space-y-3 pt-3 border-t border-gray-200/50">
-              <p style={{ color: colors.secondaryTextColor }} className="text-xs">
-                Puedes ajustar las tasas para tu negocio o comercio local:
-              </p>
-              
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label style={{ color: colors.secondaryTextColor }} className="block font-semibold mb-1">TASA USDT (Bs.)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editUsdt}
-                    onChange={(e) => setEditUsdt(e.target.value)}
-                    style={{
-                      backgroundColor: colors.surfaceColor,
-                      color: colors.textColor,
-                      borderColor: colors.borderColor,
-                    }}
-                    className="w-full px-2.5 py-2 border rounded font-mono text-sm outline-none"
-                  />
-                </div>
-                <div>
-                  <label style={{ color: colors.secondaryTextColor }} className="block font-semibold mb-1">BCV OFICIAL (Bs.)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editBcv}
-                    onChange={(e) => setEditBcv(e.target.value)}
-                    style={{
-                      backgroundColor: colors.surfaceColor,
-                      color: colors.textColor,
-                      borderColor: colors.borderColor,
-                    }}
-                    className="w-full px-2.5 py-2 border rounded font-mono text-sm outline-none"
-                  />
-                </div>
-                <div>
-                  <label style={{ color: colors.secondaryTextColor }} className="block font-semibold mb-1">EURO (Bs.)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editEuro}
-                    onChange={(e) => setEditEuro(e.target.value)}
-                    style={{
-                      backgroundColor: colors.surfaceColor,
-                      color: colors.textColor,
-                      borderColor: colors.borderColor,
-                    }}
-                    className="w-full px-2.5 py-2 border rounded font-mono text-sm outline-none"
-                  />
-                </div>
-                <div>
-                  <label style={{ color: colors.secondaryTextColor }} className="block font-semibold mb-1">BITCOIN ($ USD)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editBtc}
-                    onChange={(e) => setEditBtc(e.target.value)}
-                    style={{
-                      backgroundColor: colors.surfaceColor,
-                      color: colors.textColor,
-                      borderColor: colors.borderColor,
-                    }}
-                    className="w-full px-2.5 py-2 border rounded font-mono text-sm outline-none"
-                  />
-                </div>
-                <div>
-                  <label style={{ color: colors.secondaryTextColor }} className="block font-semibold mb-1">ONZA DE ORO ($ USD)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={editOro}
-                    onChange={(e) => setEditOro(e.target.value)}
-                    style={{
-                      backgroundColor: colors.surfaceColor,
-                      color: colors.textColor,
-                      borderColor: colors.borderColor,
-                    }}
-                    className="w-full px-2.5 py-2 border rounded font-mono text-sm outline-none"
-                  />
-                </div>
-              </div>
+          <p style={{ color: colors.secondaryTextColor }} className="text-xs mb-3">
+            Ingresa el valor de tu tasa personalizada (Bs. por dólar). Quedará guardada en tu dispositivo y se vinculará directamente con la Calculadora en la opción TasaMi.
+          </p>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  style={{ backgroundColor: colors.usdtColor }}
-                  className="flex-1 text-white py-2 rounded text-xs font-bold hover:opacity-90 transition-colors cursor-pointer"
-                >
-                  Guardar Tasas
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetRates}
-                  disabled={isResetting}
+          <form onSubmit={handleSaveTasami} className="space-y-3">
+            <div>
+              <label 
+                style={{ color: colors.secondaryTextColor }} 
+                className="block font-semibold mb-1 text-xs"
+              >
+                TasaMi (Bs.)
+              </label>
+              <div className="relative">
+                <input
+                  id="input-tasami-rate"
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  placeholder="Ej: 950.00"
+                  value={tasamiInput}
+                  onChange={(e) => setTasamiInput(e.target.value)}
                   style={{
-                    backgroundColor: isDark ? '#334155' : '#F1F5F9',
+                    backgroundColor: colors.surfaceColor,
                     color: colors.textColor,
+                    borderColor: colors.borderColor,
                   }}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded text-xs font-semibold hover:opacity-80 transition-colors cursor-pointer disabled:opacity-50"
-                  title="Restablecer con las tasas oficiales en vivo"
+                  className="w-full px-3 py-2.5 border rounded font-mono text-base font-bold outline-none focus:ring-2 focus:ring-purple-500/30"
+                />
+                <span 
+                  style={{ color: colors.secondaryTextColor }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold pointer-events-none"
                 >
-                  <RotateCcw size={12} className={isResetting ? 'animate-spin' : ''} />
-                  <span>{isResetting ? 'Restableciendo...' : 'Restablecer'}</span>
-                </button>
+                  Bs. / $
+                </span>
               </div>
-              {resetSuccessToast && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-1">
-                  <Check size={14} className="shrink-0" />
-                  <span>¡Tasas restablecidas a los valores reales y actualizados del momento!</span>
-                </div>
-              )}
-            </form>
-          )}
+            </div>
+
+            <button
+              id="btn-save-tasami"
+              type="submit"
+              style={{ backgroundColor: '#7C3AED' }}
+              className="w-full text-white py-2.5 rounded text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+            >
+              <Check size={15} />
+              <span>Guardar TasaMi</span>
+            </button>
+
+            {tasamiSavedToast && (
+              <div className="flex items-center gap-1.5 text-xs text-purple-700 dark:text-purple-300 bg-purple-500/15 border border-purple-500/30 p-2 rounded font-medium animate-fade-in">
+                <Check size={14} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                <span>¡TasaMi guardada exitosamente! Se sincronizó en tu dispositivo y en la Calculadora.</span>
+              </div>
+            )}
+          </form>
         </div>
 
         {/* Info & Fecha */}

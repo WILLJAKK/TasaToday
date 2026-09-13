@@ -90,13 +90,14 @@ export const CotizacionesView: React.FC<CotizacionesViewProps> = ({
       }
     }
 
-    // COLORES DE MARCA PRESERVADOS: Verde USDT, Rojo BCV, Azul Euro, Naranja BTC, Dorado ORO
+    // COLORES DE MARCA PRESERVADOS: Verde USDT, Rojo BCV, Azul Euro, Naranja BTC, Dorado ORO, Violeta TasaMi
     const colorConfig: Record<SelectedCurrency, { hex: string; badge: string }> = {
       usdt: { hex: colors.usdtColor, badge: 'bg-[#2C9945]' },
       bcv: { hex: colors.bcvColor, badge: 'bg-[#8B1538]' },
       euro: { hex: colors.euroColor, badge: 'bg-[#1A5276]' },
       btc: { hex: colors.btcColor, badge: 'bg-[#F7931A]' },
       oro: { hex: colors.oroColor, badge: 'bg-[#D4AF37]' },
+      tasami: { hex: '#7C3AED', badge: 'bg-[#7C3AED]' },
     };
     const cfg = colorConfig[currencyKey];
 

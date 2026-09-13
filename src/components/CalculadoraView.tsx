@@ -4,6 +4,7 @@ import { AdBanner } from './AdBanner';
 import { ArrowRightLeft, Calculator, TrendingUp, RotateCcw, Delete, Share2, Smartphone, DollarSign, Coins } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { ShareCalculationModal } from './ShareCalculationModal';
+import { getStoredTasamiRate, formatTasamiRate } from '../utils/tasami';
 
 interface CalculadoraViewProps {
   rates: ExchangeRatesData;
@@ -116,6 +117,22 @@ export const CURRENCY_THEMES: Record<SelectedCurrency, CurrencyTheme> = {
     textResult: 'text-[#D4AF37]',
     tagBg: 'bg-amber-50 text-[#B08D26] border-amber-300',
   },
+  tasami: {
+    id: 'tasami',
+    name: 'TASAMI',
+    shortLabel: 'TASAMI (Personal)',
+    badgeSub: 'Personalizada',
+    symbol: '$',
+    hex: '#7C3AED', // Violeta / Púrpura elegante
+    activePillBg: 'bg-[#7C3AED]',
+    activeDirectionBg: 'bg-[#7C3AED]',
+    borderHover: 'hover:border-[#7C3AED] hover:text-[#7C3AED]',
+    textAccent: 'text-[#7C3AED]',
+    badgeForeignBg: 'bg-[#7C3AED]',
+    badgeBsBg: 'bg-[#6D28D9]',
+    textResult: 'text-[#7C3AED]',
+    tagBg: 'bg-purple-50 text-[#7C3AED] border-purple-300 dark:bg-purple-950/40 dark:border-purple-800',
+  },
 };
 
 export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
@@ -133,6 +150,26 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
   const { colors, isDark } = useTheme();
   const [conversionDirection, setConversionDirection] = useState<'USD_TO_BS' | 'BS_TO_USD'>('USD_TO_BS');
   const [isShareCalcOpen, setIsShareCalcOpen] = useState<boolean>(false);
+
+  // Estado reactivo para TasaMi personalizada
+  const [tasamiRate, setTasamiRate] = useState<number>(() => getStoredTasamiRate());
+
+  useEffect(() => {
+    const handleTasamiChanged = (e: any) => {
+      const newRate = typeof e?.detail?.rate === 'number' ? e.detail.rate : getStoredTasamiRate();
+      setTasamiRate(newRate);
+    };
+    const handleStorage = () => {
+      setTasamiRate(getStoredTasamiRate());
+    };
+
+    window.addEventListener('tasatoday_tasami_changed', handleTasamiChanged);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('tasatoday_tasami_changed', handleTasamiChanged);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   // Método de pago activo para cobros (sincronizado con Ajustes y Modal de Compartir)
   const [paymentMethod, setPaymentMethod] = useState<PaymentOption>(() => {
@@ -217,9 +254,20 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
   const theme = CURRENCY_THEMES[selectedCurrency];
   const isBTC = selectedCurrency === 'btc';
   const isOro = selectedCurrency === 'oro';
+  const isTasami = selectedCurrency === 'tasami';
 
   // Active rate value & validación estricta de falta de datos
-  const activeItem = rates ? rates[selectedCurrency] : null;
+  const activeItem = isTasami
+    ? {
+        price: formatTasamiRate(tasamiRate),
+        numPrice: tasamiRate,
+        change: '0,00',
+        percent: '0.00',
+        isUp: true,
+        status: 'ok' as const,
+        source: 'Personalizada (Ajustes)',
+      }
+    : (rates ? rates[selectedCurrency] : null);
   const isMissingData = !activeItem || activeItem.status === 'missing' || activeItem.error === 'FALTA DE DATOS' || activeItem.numPrice === null || (activeItem.numPrice <= 0 && !isBTC && !isOro);
   const currentRate = activeItem && activeItem.numPrice ? activeItem.numPrice : 0;
   
@@ -229,6 +277,7 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
     euro: 'EURO (BCV Oficial)',
     btc: 'Bitcoin (Binance Spot)',
     oro: goldUnit === 'kg' ? 'Kilo de Oro Internacional' : goldUnit === 'g' ? 'Gramo de Oro Spot' : 'Onza de Oro Spot',
+    tasami: 'TasaMi (Personalizada)',
   };
 
   // Compute conversion (BLOQUEO ESTRICTO SI FALTA DE DATOS)
@@ -313,14 +362,18 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
       const totalBs = validAmount * currentRate;
       resultTitle = 'Total en Bolívares';
       resultDisplay = `Bs. ${totalBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      subTextDisplay = `Calculado a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
+      subTextDisplay = isTasami
+        ? `Calculado a TasaMi personalizada (Bs. ${activeItem?.price || '0'} por $)`
+        : `Calculado a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
       bcvEquivalent = rates.bcv?.numPrice ? `Bs. ${(validAmount * rates.bcv.numPrice).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'FALTA DE DATOS';
       usdtEquivalent = rates.usdt?.numPrice ? `Bs. ${(validAmount * rates.usdt.numPrice).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'FALTA DE DATOS';
     } else {
       const converted = validAmount > 0 && currentRate > 0 ? validAmount / currentRate : 0;
       resultTitle = selectedCurrency === 'euro' ? 'Total en Euros' : 'Total en Dólares';
       resultDisplay = `${symbol} ${converted.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      subTextDisplay = `Equivalente en ${selectedCurrency === 'euro' ? 'Euros' : 'Dólares'} a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
+      subTextDisplay = isTasami
+        ? `Equivalente en Dólares a TasaMi personalizada (Bs. ${activeItem?.price || '0'} por $)`
+        : `Equivalente en ${selectedCurrency === 'euro' ? 'Euros' : 'Dólares'} a tasa ${currencyLabels[selectedCurrency]} (Bs. ${activeItem?.price || '0'} por ${symbol})`;
       bcvEquivalent = rates.bcv?.numPrice ? `$ ${(validAmount / rates.bcv.numPrice).toFixed(2).replace('.', ',')}` : 'FALTA DE DATOS';
       usdtEquivalent = rates.usdt?.numPrice ? `$ ${(validAmount / rates.usdt.numPrice).toFixed(2).replace('.', ',')}` : 'FALTA DE DATOS';
     }
@@ -451,23 +504,24 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
         </div>
       </div>
 
-        {/* Currency Selector Pills con Código de Color */}
+        {/* Currency Selector Pills con Código de Color: USDT BCV EURO BTC ORO TASAMI */}
         <div 
           style={{ 
             backgroundColor: isDark ? '#1E293B' : '#E2E8F0',
             borderColor: colors.borderColor 
           }}
-          className="grid grid-cols-5 gap-1 p-1 rounded-md border"
+          className="grid grid-cols-6 gap-1 p-1 rounded-md border"
         >
-          {(['usdt', 'bcv', 'euro', 'btc', 'oro'] as SelectedCurrency[]).map((curr) => {
+          {(['usdt', 'bcv', 'euro', 'btc', 'oro', 'tasami'] as SelectedCurrency[]).map((curr) => {
             const isSelected = selectedCurrency === curr;
             const itemTheme = CURRENCY_THEMES[curr];
+            const pillLabel = curr === 'oro' ? 'ORO' : (curr === 'tasami' ? 'TASAMI' : itemTheme.name);
             return (
               <button
                 key={curr}
                 id={`btn-calc-currency-${curr}`}
                 onClick={() => handleSelectCurrency(curr)}
-                className={`text-xs font-bold py-2 px-1 rounded transition-all truncate text-center flex items-center justify-center gap-1 cursor-pointer ${
+                className={`text-[11px] sm:text-xs font-bold py-2 px-0.5 sm:px-1 rounded transition-all truncate text-center flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer ${
                   isSelected 
                     ? `${itemTheme.activePillBg} text-white shadow-xs` 
                     : isDark ? 'text-gray-300 hover:bg-white/10' : 'text-gray-700 hover:bg-white/70'
@@ -477,7 +531,7 @@ export const CalculadoraView: React.FC<CalculadoraViewProps> = ({
                   className={`w-2 h-2 rounded-full shrink-0 transition-transform ${isSelected ? 'bg-white scale-110' : ''}`}
                   style={{ backgroundColor: isSelected ? '#FFFFFF' : itemTheme.hex }}
                 />
-                <span className="truncate">{curr === 'oro' ? (goldUnit === 'kg' ? 'ORO (Kg)' : goldUnit === 'g' ? 'ORO (G)' : 'ORO (Oz)') : itemTheme.name}</span>
+                <span className="truncate">{pillLabel}</span>
               </button>
             );
           })}

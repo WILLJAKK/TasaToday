@@ -10,6 +10,7 @@ import {
   UsdtData 
 } from '../types';
 import { useTheme } from '../context/ThemeContext';
+import { getStoredTasamiRate, formatTasamiRate } from '../utils/tasami';
 import { 
   X, 
   Share2, 
@@ -338,9 +339,17 @@ export const ShareCalculationModal: React.FC<ShareCalculationModalProps> = ({
     euro: 'EURO Oficial',
     btc: 'Bitcoin Spot',
     oro: goldUnit === 'kg' ? 'Kilo de Oro' : goldUnit === 'g' ? 'Gramo de Oro' : 'Onza de Oro',
+    tasami: 'TasaMi (Personalizada)',
   };
 
-  const activeRateItem = rates[selectedCurrency];
+  const storedTasami = selectedCurrency === 'tasami' ? getStoredTasamiRate() : 0;
+  const activeRateItem = selectedCurrency === 'tasami'
+    ? {
+        price: formatTasamiRate(storedTasami),
+        numPrice: storedTasami,
+        status: 'ok' as const,
+      }
+    : rates[selectedCurrency];
   const ratePriceFormatted = activeRateItem?.price || '0,00';
 
   // Fecha actual formateada
