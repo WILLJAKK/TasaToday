@@ -215,8 +215,8 @@ export default function App() {
 
   return (
     <div 
-      style={{ backgroundColor: isDark ? '#090D16' : '#E5E7EB' }}
-      className="min-h-screen flex items-center justify-center p-0 md:p-4 font-sans transition-colors duration-200"
+      style={{ backgroundColor: colors.backgroundColor }}
+      className="w-full min-h-[100dvh] md:min-h-screen md:flex md:items-center md:justify-center p-0 md:p-4 font-sans transition-colors duration-200"
     >
       <main
         id="app-root-container"
@@ -224,10 +224,10 @@ export default function App() {
           backgroundColor: colors.backgroundColor,
           borderColor: isDark ? colors.borderColor : undefined 
         }}
-        className={`w-full flex flex-col overflow-hidden transition-all duration-300 ${
+        className={`w-full flex flex-col transition-all duration-300 ${
           isPhoneFrame
-            ? 'max-w-[440px] h-[100dvh] md:h-[840px] md:max-h-[92vh] md:rounded-2xl md:shadow-2xl md:border'
-            : 'max-w-4xl h-[100dvh] md:h-[90vh] md:rounded-2xl md:shadow-2xl md:border'
+            ? 'max-w-[440px] h-[100dvh] md:h-[840px] md:max-h-[92vh] md:rounded-2xl md:shadow-2xl md:border md:overflow-hidden'
+            : 'max-w-4xl h-[100dvh] md:h-[90vh] md:rounded-2xl md:shadow-2xl md:border md:overflow-hidden'
         }`}
       >
         {/* Cabecera Clásica $ TasaToday */}

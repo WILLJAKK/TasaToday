@@ -186,13 +186,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       // Sincronizar meta theme-color para navegadores móviles (Safari iOS y Chrome Android)
-      let metaTheme = document.querySelector('meta[name="theme-color"]');
-      if (!metaTheme) {
-        metaTheme = document.createElement('meta');
-        metaTheme.setAttribute('name', 'theme-color');
-        document.head.appendChild(metaTheme);
+      const themeColorValue = isDark ? '#18202E' : '#F8FAFC';
+      const metaThemes = document.querySelectorAll('meta[name="theme-color"]');
+      if (metaThemes.length > 0) {
+        metaThemes.forEach(meta => meta.setAttribute('content', themeColorValue));
+      } else {
+        const meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        meta.setAttribute('content', themeColorValue);
+        document.head.appendChild(meta);
       }
-      metaTheme.setAttribute('content', isDark ? '#18202E' : '#FFFFFF');
 
       // Sincronizar barra de estado para PWA / Web Clip en iOS
       let metaApple = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
@@ -201,7 +204,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         metaApple.setAttribute('name', 'apple-mobile-web-app-status-bar-style');
         document.head.appendChild(metaApple);
       }
-      metaApple.setAttribute('content', 'default');
+      metaApple.setAttribute('content', isDark ? 'black-translucent' : 'default');
     }
   }, [isDark]);
 
