@@ -1,44 +1,30 @@
-import fs from 'fs';
-import path from 'path';
+import { getStore } from '@netlify/blobs';
 import webpush from 'web-push';
+import { eq } from 'drizzle-orm';
+import { db } from '../../db/index.js';
+import { pushSubscriptions, nativePushTokens } from '../../db/schema.js';
 
-const VAPID_KEYS_FILE = path.join(process.cwd(), 'vapid_keys.json');
-let vapidKeys: { publicKey: string; privateKey: string };
-
-try {
-  if (fs.existsSync(VAPID_KEYS_FILE)) {
-    vapidKeys = JSON.parse(fs.readFileSync(VAPID_KEYS_FILE, 'utf8'));
-  } else {
-    vapidKeys = webpush.generateVAPIDKeys();
-    fs.writeFileSync(VAPID_KEYS_FILE, JSON.stringify(vapidKeys, null, 2), 'utf8');
-  }
-} catch {
-  vapidKeys = webpush.generateVAPIDKeys();
+interface VapidKeys {
+  publicKey: string;
+  privateKey: string;
 }
 
-webpush.setVapidDetails(
-  'mailto:notificaciones@tasatoday.com',
-  vapidKeys.publicKey,
-  vapidKeys.privateKey
-);
+const configStore = getStore('push-config');
+let vapidKeysPromise: Promise<VapidKeys> | null = null;
 
-const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'push_subscriptions.json');
-
-function getSubscriptions(): Array<webpush.PushSubscription & { createdAt?: string }> {
-  try {
-    if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
-      return JSON.parse(fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf8'));
-    }
-  } catch {}
-  return [];
-}
-
-function saveSubscriptions(subs: any[]) {
-  try {
-    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subs, null, 2), 'utf8');
-  } catch (err) {
-    console.error('[PUSH] Error al guardar push_subscriptions.json:', err);
+async function getVapidKeys(): Promise<VapidKeys> {
+  if (!vapidKeysPromise) {
+    vapidKeysPromise = (async () => {
+      const existing = await configStore.get('vapid-keys', { type: 'json' }).catch(() => null);
+      if (existing && (existing as VapidKeys).publicKey && (existing as VapidKeys).privateKey) {
+        return existing as VapidKeys;
+      }
+      const generated = webpush.generateVAPIDKeys();
+      await configStore.setJSON('vapid-keys', generated).catch(() => {});
+      return generated;
+    })();
   }
+  return vapidKeysPromise;
 }
 
 export async function broadcastPush(payload: {
@@ -51,8 +37,11 @@ export async function broadcastPush(payload: {
   tipoCambioBsUsd?: string;
   tipoCambioBsEur?: string;
 }) {
-  const subs = getSubscriptions();
+  const subs = await db.select().from(pushSubscriptions);
   if (subs.length === 0) return;
+
+  const vapidKeys = await getVapidKeys();
+  webpush.setVapidDetails('mailto:notificaciones@tasatoday.com', vapidKeys.publicKey, vapidKeys.privateKey);
 
   const stringifiedPayload = JSON.stringify({
     title: payload.title,
@@ -78,7 +67,11 @@ export async function broadcastPush(payload: {
 
   const promises = subs.map(async (sub) => {
     try {
-      await webpush.sendNotification(sub, stringifiedPayload, sendOptions);
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        stringifiedPayload,
+        sendOptions
+      );
     } catch (err: any) {
       if (err?.statusCode === 404 || err?.statusCode === 410) {
         deadEndpoints.push(sub.endpoint);
@@ -88,9 +81,8 @@ export async function broadcastPush(payload: {
 
   await Promise.allSettled(promises);
 
-  if (deadEndpoints.length > 0) {
-    const updated = subs.filter((s) => !deadEndpoints.includes(s.endpoint));
-    saveSubscriptions(updated);
+  for (const endpoint of deadEndpoints) {
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint)).catch(() => {});
   }
 }
 
@@ -114,6 +106,7 @@ export async function handler(event: {
 
   // GET /api/push/vapid-public-key
   if (urlPath.includes('vapid-public-key')) {
+    const vapidKeys = await getVapidKeys();
     return {
       statusCode: 200,
       headers,
@@ -122,7 +115,7 @@ export async function handler(event: {
   }
 
   // POST /api/push/subscribe
-  if (urlPath.includes('subscribe') && method === 'POST') {
+  if (urlPath.includes('subscribe') && !urlPath.includes('unsubscribe') && method === 'POST') {
     try {
       const data = event.body ? JSON.parse(event.body) : {};
       const subscription = data.subscription;
@@ -130,14 +123,20 @@ export async function handler(event: {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Suscripción inválida' }) };
       }
 
-      const subs = getSubscriptions();
-      if (!subs.some((s) => s.endpoint === subscription.endpoint)) {
-        subs.push({ ...subscription, createdAt: new Date().toISOString() });
-        saveSubscriptions(subs);
-      }
+      await db
+        .insert(pushSubscriptions)
+        .values({
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+        })
+        .onConflictDoNothing({ target: pushSubscriptions.endpoint });
 
       // Disparar push de confirmación real del sistema de vuelta al dispositivo
       try {
+        const vapidKeys = await getVapidKeys();
+        webpush.setVapidDetails('mailto:notificaciones@tasatoday.com', vapidKeys.publicKey, vapidKeys.privateKey);
+
         const confirmationPayload = JSON.stringify({
           title: '¡Alertas Activadas!',
           body: 'Recibirás las notificaciones de TasaToday aquí.',
@@ -157,7 +156,7 @@ export async function handler(event: {
         console.warn('[PUSH Serverless] Nota al enviar confirmación inmediata:', pushErr?.message);
       }
 
-      return { statusCode: 200, headers, body: JSON.stringify({ success: true, count: subs.length, pushSent: true }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true, pushSent: true }) };
     } catch (err: any) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
     }
@@ -169,9 +168,28 @@ export async function handler(event: {
       const data = event.body ? JSON.parse(event.body) : {};
       const endpoint = data.endpoint;
       if (endpoint) {
-        const subs = getSubscriptions().filter((s) => s.endpoint !== endpoint);
-        saveSubscriptions(subs);
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
       }
+      return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+    } catch (err: any) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
+    }
+  }
+
+  // POST /api/push/native-register (iOS APNs / Android FCM vía Capacitor)
+  if (urlPath.includes('native-register') && method === 'POST') {
+    try {
+      const data = event.body ? JSON.parse(event.body) : {};
+      const { token, platform } = data;
+      if (!token || !platform) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'Token o plataforma inválidos' }) };
+      }
+
+      await db
+        .insert(nativePushTokens)
+        .values({ token, platform })
+        .onConflictDoNothing({ target: nativePushTokens.token });
+
       return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
     } catch (err: any) {
       return { statusCode: 500, headers, body: JSON.stringify({ error: err.message }) };
@@ -221,13 +239,15 @@ export async function handler(event: {
 
   // GET /api/push/status
   if (urlPath.includes('status')) {
-    const subs = getSubscriptions();
+    const subs = await db.select().from(pushSubscriptions);
+    const nativeTokens = await db.select().from(nativePushTokens);
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         configured: true,
         subscribersCount: subs.length,
+        nativeTokensCount: nativeTokens.length,
       }),
     };
   }
