@@ -1,44 +1,39 @@
-import fs from 'fs';
-import path from 'path';
+import { getStore } from '@netlify/blobs';
 import webpush from 'web-push';
 
-const VAPID_KEYS_FILE = path.join(process.cwd(), 'vapid_keys.json');
-let vapidKeys: { publicKey: string; privateKey: string };
+// Las funciones de Netlify se ejecutan en contenedores efímeros: el sistema de archivos
+// local NO persiste entre invocaciones ni entre despliegues. Usamos Netlify Blobs (con
+// consistencia fuerte) para que las claves VAPID y las suscripciones sobrevivan siempre,
+// sin importar qué instancia de la función atienda cada request.
+const store = getStore({ name: 'push-notifications', consistency: 'strong' });
 
-try {
-  if (fs.existsSync(VAPID_KEYS_FILE)) {
-    vapidKeys = JSON.parse(fs.readFileSync(VAPID_KEYS_FILE, 'utf8'));
-  } else {
-    vapidKeys = webpush.generateVAPIDKeys();
-    fs.writeFileSync(VAPID_KEYS_FILE, JSON.stringify(vapidKeys, null, 2), 'utf8');
+let vapidKeys: { publicKey: string; privateKey: string } | null = null;
+let vapidReadyPromise: Promise<{ publicKey: string; privateKey: string }> | null = null;
+
+async function ensureVapidKeys(): Promise<{ publicKey: string; privateKey: string }> {
+  if (vapidKeys) return vapidKeys;
+  if (!vapidReadyPromise) {
+    vapidReadyPromise = (async () => {
+      let keys = await store.get('vapid-keys', { type: 'json' }) as { publicKey: string; privateKey: string } | null;
+      if (!keys?.publicKey || !keys?.privateKey) {
+        keys = webpush.generateVAPIDKeys();
+        await store.setJSON('vapid-keys', keys);
+      }
+      webpush.setVapidDetails('mailto:notificaciones@tasatoday.com', keys.publicKey, keys.privateKey);
+      vapidKeys = keys;
+      return keys;
+    })();
   }
-} catch {
-  vapidKeys = webpush.generateVAPIDKeys();
+  return vapidReadyPromise;
 }
 
-webpush.setVapidDetails(
-  'mailto:notificaciones@tasatoday.com',
-  vapidKeys.publicKey,
-  vapidKeys.privateKey
-);
-
-const SUBSCRIPTIONS_FILE = path.join(process.cwd(), 'push_subscriptions.json');
-
-function getSubscriptions(): Array<webpush.PushSubscription & { createdAt?: string }> {
-  try {
-    if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
-      return JSON.parse(fs.readFileSync(SUBSCRIPTIONS_FILE, 'utf8'));
-    }
-  } catch {}
-  return [];
+async function getSubscriptions(): Promise<Array<webpush.PushSubscription & { createdAt?: string }>> {
+  const subs = await store.get('subscriptions', { type: 'json' });
+  return Array.isArray(subs) ? subs : [];
 }
 
-function saveSubscriptions(subs: any[]) {
-  try {
-    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(subs, null, 2), 'utf8');
-  } catch (err) {
-    console.error('[PUSH] Error al guardar push_subscriptions.json:', err);
-  }
+async function saveSubscriptions(subs: any[]) {
+  await store.setJSON('subscriptions', subs);
 }
 
 export async function broadcastPush(payload: {
@@ -51,7 +46,8 @@ export async function broadcastPush(payload: {
   tipoCambioBsUsd?: string;
   tipoCambioBsEur?: string;
 }) {
-  const subs = getSubscriptions();
+  await ensureVapidKeys();
+  const subs = await getSubscriptions();
   if (subs.length === 0) return;
 
   const stringifiedPayload = JSON.stringify({
@@ -90,7 +86,7 @@ export async function broadcastPush(payload: {
 
   if (deadEndpoints.length > 0) {
     const updated = subs.filter((s) => !deadEndpoints.includes(s.endpoint));
-    saveSubscriptions(updated);
+    await saveSubscriptions(updated);
   }
 }
 
@@ -114,10 +110,11 @@ export async function handler(event: {
 
   // GET /api/push/vapid-public-key
   if (urlPath.includes('vapid-public-key')) {
+    const keys = await ensureVapidKeys();
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ publicKey: vapidKeys.publicKey }),
+      body: JSON.stringify({ publicKey: keys.publicKey }),
     };
   }
 
@@ -130,10 +127,10 @@ export async function handler(event: {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'Suscripción inválida' }) };
       }
 
-      const subs = getSubscriptions();
+      const subs = await getSubscriptions();
       if (!subs.some((s) => s.endpoint === subscription.endpoint)) {
         subs.push({ ...subscription, createdAt: new Date().toISOString() });
-        saveSubscriptions(subs);
+        await saveSubscriptions(subs);
       }
       return { statusCode: 200, headers, body: JSON.stringify({ success: true, count: subs.length }) };
     } catch (err: any) {
@@ -147,8 +144,8 @@ export async function handler(event: {
       const data = event.body ? JSON.parse(event.body) : {};
       const endpoint = data.endpoint;
       if (endpoint) {
-        const subs = getSubscriptions().filter((s) => s.endpoint !== endpoint);
-        saveSubscriptions(subs);
+        const subs = (await getSubscriptions()).filter((s) => s.endpoint !== endpoint);
+        await saveSubscriptions(subs);
       }
       return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
     } catch (err: any) {
@@ -199,7 +196,7 @@ export async function handler(event: {
 
   // GET /api/push/status
   if (urlPath.includes('status')) {
-    const subs = getSubscriptions();
+    const subs = await getSubscriptions();
     return {
       statusCode: 200,
       headers,

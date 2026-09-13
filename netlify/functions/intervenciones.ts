@@ -2,8 +2,7 @@
 // Backend Scraper Serverless para Intervenciones Cambiarias del BCV
 // Banco Central de Venezuela (bcv.org.ve/politica-cambiaria/intervencion-cambiaria)
 
-import fs from 'fs';
-import path from 'path';
+import { getStore } from '@netlify/blobs';
 import { broadcastPush } from './push';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -17,36 +16,43 @@ export interface IntervencionItem {
   isRecent?: boolean;
 }
 
-const LAST_INTERVENCION_FILE = path.join(process.cwd(), 'last_intervencion.json');
-let lastKnownIntervencionId: string = '';
+// Igual que en push.ts: el sistema de archivos de las funciones no persiste entre
+// invocaciones, así que el último ID de intervención visto se guarda en Netlify Blobs
+// para poder detectar correctamente una intervención nueva y disparar la notificación.
+const stateStore = getStore({ name: 'bcv-intervenciones-state', consistency: 'strong' });
 
-try {
-  if (fs.existsSync(LAST_INTERVENCION_FILE)) {
-    const saved = JSON.parse(fs.readFileSync(LAST_INTERVENCION_FILE, 'utf8'));
-    lastKnownIntervencionId = saved.id || '';
+let lastKnownIntervencionId: string | null = null;
+let lastKnownLoadPromise: Promise<string> | null = null;
+
+async function loadLastKnownIntervencionId(): Promise<string> {
+  if (lastKnownIntervencionId !== null) return lastKnownIntervencionId;
+  if (!lastKnownLoadPromise) {
+    lastKnownLoadPromise = (async () => {
+      const saved = await stateStore.get('last-intervencion-id', { type: 'text' });
+      lastKnownIntervencionId = saved || '';
+      return lastKnownIntervencionId;
+    })();
   }
-} catch {}
+  return lastKnownLoadPromise;
+}
 
-function checkAndBroadcastNewIntervencion(latestItem: IntervencionItem) {
+async function checkAndBroadcastNewIntervencion(latestItem: IntervencionItem) {
   if (!latestItem || !latestItem.fecha || !latestItem.nro) return;
 
   const currentId = `${latestItem.nro}_${latestItem.fecha}_${latestItem.tipoCambioBsUsd}`;
+  const knownId = await loadLastKnownIntervencionId();
 
-  if (!lastKnownIntervencionId) {
+  if (!knownId) {
     lastKnownIntervencionId = currentId;
-    try {
-      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
-    } catch {}
+    await stateStore.set('last-intervencion-id', currentId);
     return;
   }
 
-  if (currentId !== lastKnownIntervencionId) {
+  if (currentId !== knownId) {
     lastKnownIntervencionId = currentId;
-    try {
-      fs.writeFileSync(LAST_INTERVENCION_FILE, JSON.stringify({ id: currentId, item: latestItem }, null, 2), 'utf8');
-    } catch {}
+    await stateStore.set('last-intervencion-id', currentId);
 
-    broadcastPush({
+    await broadcastPush({
       title: '🚨 NUEVA INTERVENCIÓN CAMBIARIA BCV',
       body: `Intervención N° ${latestItem.nro} (${latestItem.fecha}): Bs. ${latestItem.tipoCambioBsUsd} / USD | Bs. ${latestItem.tipoCambioBsEur} / EUR. Toca para ver detalles.`,
       tag: `intervencion-${latestItem.nro}-${latestItem.fecha}`,
@@ -170,7 +176,7 @@ async function scrapeBcvIntervenciones(): Promise<IntervencionItem[]> {
     throw new Error('No se pudieron extraer filas válidas de la tabla del BCV');
   }
 
-  checkAndBroadcastNewIntervencion(items[0]);
+  await checkAndBroadcastNewIntervencion(items[0]);
 
   return items;
 }
